@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "name": "suiter",
+  "github": "https://github.com/SuperMarioYL/suiter",
+  "host": "suiter.lei6393.com",
+  "lang": { "primary": "zh", "toggle": true },
+  "accent": ["#8b7cf6", "#4d9bff", "#34e5d0"],
+  "hero": {
+    "eyebrow": {
+      "zh": "4 套归一 · 1 条命令 · agent 直读飞书",
+      "en": "4 suites in one · 1 command · agent reads Feishu"
+    },
+    "headline": {
+      "zh": "一次登录\nagent 读懂你的飞书",
+      "en": "One login\nyour agent reads your Feishu"
+    },
+    "sub": {
+      "zh": "一次浏览器授权把凭证存好，飞书文档正文以 JSON 直接落进你的 agent 上下文——钉钉日历、企微消息、腾讯文档用同一种方式，下一版就位。",
+      "en": "One browser auth caches your token; your Feishu doc body lands in your agent's context as JSON. DingTalk calendar, WeCom messages and Tencent Docs arrive the same way next release."
+    },
+    "command": "suiter login feishu",
+    "cta": { "zh": "快速开始", "en": "Quickstart" },
+    "ctaGithub": { "zh": "在 GitHub 查看", "en": "View on GitHub" }
+  },
+  "advantages": [
+    {
+      "title": { "zh": "登录一次，跨会话记住", "en": "Log in once, remembered across sessions" },
+      "body": {
+        "zh": "登录一次就够了。凭证存在你本机，下次开机、换个会话都还在——不用反复授权，更不用为每个套件手搓一遍登录。飞书已通，其余三套走同一种方式，下一版就位。",
+        "en": "Log in once and you're done. The token lives on your machine and survives restarts and new sessions — no re-authenticating, and no hand-built login per suite. Feishu is live; the other three arrive the same way next release."
+      },
+      "chips": [
+        "› 飞书已通",
+        "› 凭证本地存好",
+        "› 其余三套在路上"
+      ]
+    },
+    {
+      "title": { "zh": "agent 直接读懂你的飞书文档", "en": "Your agent reads your Feishu docs" },
+      "body": {
+        "zh": "一条命令把飞书文档正文拉出来，变成你的 agent 能直接读的 JSON 落进上下文。不用复制粘贴，也不用自己封一个文档接口。",
+        "en": "One command pulls your Feishu doc body and drops it into your agent's context as JSON it can read. No copy-paste, no hand-rolling a doc API."
+      },
+      "chips": [
+        "› 文档正文直出",
+        "› agent 可读 JSON",
+        "› pipe 进上下文"
+      ]
+    },
+    {
+      "title": { "zh": "4 套办公套件，一种命令写法", "en": "Four office suites, one command grammar" },
+      "body": {
+        "zh": "飞书、钉钉、企微、腾讯文档——四家各自一套接口和登录。suiter 的设计是让四家共用同一种命令写法：登录、读取、写入都一样。飞书已通，其余三套复用同一套登录与缓存，下一版接入。",
+        "en": "Feishu, DingTalk, WeCom, Tencent Docs — four suites, each with its own API and login. suiter is designed so all four share one command shape: login, read and write work the same way. Feishu is live; the other three reuse the same login and cache, arriving next release."
+      },
+      "chips": [
+        "› 4 套收敛",
+        "› 同一种命令写法",
+        "› 飞书先行"
+      ]
+    },
+    {
+      "title": { "zh": "接的是你真正在用的那四家", "en": "It talks to the four you actually use" },
+      "body": {
+        "zh": "能让 agent 读写 Google Workspace 的工具不少，可 CN 开发者真正活在飞书、钉钉、企微、腾讯文档里——那些数据外面的工具够不到。suiter 为这四家而生，飞书已通、其余在路上，全程在本机跑、不连云，你的 agent 在你自己的办公数据上干活。",
+        "en": "Plenty of tools let an agent read Google Workspace — but CN devs actually live in Feishu, DingTalk, WeCom and Tencent Docs, and that data is out of reach for outside tools. suiter is built for those four — Feishu live, the rest on the way — runs entirely on your machine with no cloud, and lets your agent work on your own office data."
+      },
+      "chips": [
+        "› 接 CN 四家",
+        "› 本机跑·不连云",
+        "› agent 在本机干活"
+      ]
+    }
+  ],
+  "scene": {
+    "kind": "hub-nodes",
+    "nodes": ["飞书", "钉钉", "企微", "腾讯文档"]
+  },
+  "cta": {
+    "headline": {
+      "zh": "把 4 套手搓登录，收成一条命令",
+      "en": "Collapse 4 hand-built logins into one command"
+    },
+    "sub": {
+      "zh": "开源、MIT、无付费墙。让 agent 读懂你自己的办公数据，这一核心动作永不设墙。",
+      "en": "Open source, MIT, no paywall. Letting your agent read your own office data is never gated."
+    },
+    "button": { "zh": "在 GitHub 上开始", "en": "Get started on GitHub" }
+  },
+  "footer": {
+    "tag": {
+      "zh": "给 coding agent 接上飞书/钉钉/企微/腾讯文档的命令行工具",
+      "en": "The CLI that connects coding agents to Feishu/DingTalk/WeCom/Tencent Docs"
+    }
+  }
+}
