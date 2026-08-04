@@ -5,6 +5,7 @@
 package feishu
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -92,29 +93,12 @@ func (c *Client) Login(ctx context.Context) (suite.Token, error) {
 	codeCh := make(chan string, 1)
 	errCh := make(chan error, 1)
 	srv := &http.Server{ReadTimeout: 30 * time.Second}
-	srv.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		if e := q.Get("error"); e != "" {
-			errCh <- fmt.Errorf("feishu: oauth error: %s", e)
-			http.Error(w, "oauth error", http.StatusBadRequest)
-			return
-		}
-		if got := q.Get("state"); got != state {
-			errCh <- fmt.Errorf("feishu: state mismatch")
-			http.Error(w, "state mismatch", http.StatusBadRequest)
-			return
-		}
-		code := q.Get("code")
-		if code == "" {
-			return
-		}
-		codeCh <- code
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, "<h1>suiter</h1><p>登录成功，请返回终端。</p>")
-	})
+	srv.Handler = c.oauthHandler(state, codeCh, errCh)
 
 	go func() { _ = srv.Serve(ln) }()
-	defer srv.Shutdown(context.Background())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer srv.Shutdown(shutdownCtx)
 
 	fmt.Fprintf(os.Stderr, "Open this URL in your browser to authorize 飞书:\n  %s\n", authURL)
 	openBrowser(authURL)
@@ -131,6 +115,51 @@ func (c *Client) Login(ctx context.Context) (suite.Token, error) {
 	}
 }
 
+// oauthHandler builds the loopback callback handler. Only the /callback path
+// participates in the OAuth flow; every other request (favicon, probes, a
+// second browser connection) is 404'd WITHOUT touching the channels so it can
+// neither abort login via errCh nor block Shutdown by hanging on a full
+// channel send. All sends are non-blocking (select/default) so only the first
+// callback wins and a reload/second connection cannot deadlock the handler.
+func (c *Client) oauthHandler(state string, codeCh chan string, errCh chan error) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/callback" {
+			http.NotFound(w, r)
+			return
+		}
+		q := r.URL.Query()
+		if e := q.Get("error"); e != "" {
+			select {
+			case errCh <- fmt.Errorf("feishu: oauth error: %s", e):
+			default:
+			}
+			http.Error(w, "oauth error", http.StatusBadRequest)
+			return
+		}
+		// A stray request with the wrong state (a replay, second connection,
+		// or probe that happened to hit /callback) must NOT abort the flow:
+		// respond 400 without pushing to errCh so only the real callback wins.
+		if got := q.Get("state"); got != state {
+			http.Error(w, "state mismatch", http.StatusBadRequest)
+			return
+		}
+		code := q.Get("code")
+		if code == "" {
+			http.Error(w, "missing code", http.StatusBadRequest)
+			return
+		}
+		select {
+		case codeCh <- code:
+		default:
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			fmt.Fprint(w, "<h1>suiter</h1><p>登录已处理，请返回终端。</p>")
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, "<h1>suiter</h1><p>登录成功，请返回终端。</p>")
+	})
+}
+
 func (c *Client) authURL(redirect, state string) string {
 	q := url.Values{}
 	q.Set("app_id", c.appID)
@@ -144,9 +173,15 @@ func (c *Client) exchange(ctx context.Context, code string) (suite.Token, error)
 	if err != nil {
 		return suite.Token{}, err
 	}
-	body := url.Values{"grant_type": {"authorization_code"}, "code": {code}}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+oidcTokenPath, strings.NewReader(body.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	// The official larksuite oapi-sdk-go sends a JSON body (not form-encoded),
+	// so match that contract: {"grant_type":"authorization_code","code":...}.
+	reqBody := struct {
+		GrantType string `json:"grant_type"`
+		Code      string `json:"code"`
+	}{GrantType: "authorization_code", Code: code}
+	body, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+oidcTokenPath, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("Authorization", "Bearer "+appTok)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -157,14 +192,21 @@ func (c *Client) exchange(ctx context.Context, code string) (suite.Token, error)
 	if resp.StatusCode != http.StatusOK {
 		return suite.Token{}, fmt.Errorf("feishu: exchange status %d: %s", resp.StatusCode, string(raw))
 	}
+	// Feishu nests the token fields under a top-level "data" object (per the
+	// larksuite SDK's CreateOidcAccessTokenResp.Data): code/msg stay at the
+	// top level so the guard still works, but access_token et al. live in
+	// tr.Data — reading them at the top level left AccessToken "" and cached
+	// an empty token (the m1 star-moment break). Build the Token from tr.Data.
 	var tr struct {
-		Code             int    `json:"code"`
-		Msg              string `json:"msg"`
-		AccessToken      string `json:"access_token"`
-		RefreshToken     string `json:"refresh_token"`
-		TokenType        string `json:"token_type"`
-		ExpiresIn        int64  `json:"expires_in"`
-		RefreshExpiresIn int64  `json:"refresh_expires_in"`
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data struct {
+			AccessToken      string `json:"access_token"`
+			RefreshToken     string `json:"refresh_token"`
+			TokenType        string `json:"token_type"`
+			ExpiresIn        int64  `json:"expires_in"`
+			RefreshExpiresIn int64  `json:"refresh_expires_in"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &tr); err != nil {
 		return suite.Token{}, fmt.Errorf("feishu: parse exchange: %w", err)
@@ -173,10 +215,10 @@ func (c *Client) exchange(ctx context.Context, code string) (suite.Token, error)
 		return suite.Token{}, fmt.Errorf("feishu: exchange code=%d msg=%s", tr.Code, tr.Msg)
 	}
 	return suite.Token{
-		AccessToken:  tr.AccessToken,
-		RefreshToken: tr.RefreshToken,
-		TokenType:    firstNonEmpty(tr.TokenType, "Bearer"),
-		ExpiresIn:    tr.ExpiresIn,
+		AccessToken:  tr.Data.AccessToken,
+		RefreshToken: tr.Data.RefreshToken,
+		TokenType:    firstNonEmpty(tr.Data.TokenType, "Bearer"),
+		ExpiresIn:    tr.Data.ExpiresIn,
 		ObtainedAt:   time.Now().Unix(),
 	}, nil
 }
@@ -254,6 +296,14 @@ func (c *Client) cachedToken(ctx context.Context) (string, error) {
 	}
 	if tok.AccessToken == "" {
 		return "", fmt.Errorf("feishu: empty cached token (run `suiter login feishu`)")
+	}
+	// A token cached hours/days ago (Feishu user access tokens expire ~2h)
+	// used to be returned unconditionally and Feishu answered 401 with an
+	// opaque error. Treat staleness locally: if the cached token is past its
+	// ExpiresIn, ask the user to re-login instead of sending a dead token.
+	// Full refresh-token logic is a later feature; this just stops silent use.
+	if tok.ExpiresIn > 0 && time.Now().Unix()-tok.ObtainedAt >= tok.ExpiresIn {
+		return "", fmt.Errorf("feishu: token expired (re-run `suiter login feishu`)")
 	}
 	return tok.AccessToken, nil
 }

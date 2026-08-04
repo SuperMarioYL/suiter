@@ -1,5 +1,6 @@
 {
   "schema": 1,
+  "content_version": "v0.2.0",
   "name": "suiter",
   "github": "https://github.com/SuperMarioYL/suiter",
   "host": "suiter.lei6393.com",
@@ -7,16 +8,16 @@
   "accent": ["#8b7cf6", "#4d9bff", "#34e5d0"],
   "hero": {
     "eyebrow": {
-      "zh": "4 套归一 · 1 条命令 · agent 直读飞书",
-      "en": "4 suites in one · 1 command · agent reads Feishu"
+      "zh": "4 套归一 · 1 条命令 · agent 直读飞书/钉钉/企微",
+      "en": "4 suites in one · 1 command · agent reads Feishu/DingTalk/WeCom"
     },
     "headline": {
-      "zh": "一次登录\nagent 读懂你的飞书",
-      "en": "One login\nyour agent reads your Feishu"
+      "zh": "一次登录\nagent 读懂你的飞书/钉钉/企微",
+      "en": "One login\nyour agent reads your Feishu/DingTalk/WeCom"
     },
     "sub": {
-      "zh": "一次浏览器授权把凭证存好，飞书文档正文以 JSON 直接落进你的 agent 上下文——钉钉日历、企微消息、腾讯文档用同一种方式，下一版就位。",
-      "en": "One browser auth caches your token; your Feishu doc body lands in your agent's context as JSON. DingTalk calendar, WeCom messages and Tencent Docs arrive the same way next release."
+      "zh": "一次浏览器授权把凭证存好，飞书文档正文、钉钉日历、企微消息以 JSON 直接落进你的 agent 上下文——3 套已通，腾讯文档用同一种方式，下一版就位。",
+      "en": "One browser auth caches your token; your Feishu docs, DingTalk calendar and WeCom messages land in your agent's context as JSON it can read. 3 suites live; Tencent Docs arrives the same way next release."
     },
     "command": "suiter login feishu",
     "cta": { "zh": "快速开始", "en": "Quickstart" },
@@ -26,13 +27,13 @@
     {
       "title": { "zh": "登录一次，跨会话记住", "en": "Log in once, remembered across sessions" },
       "body": {
-        "zh": "登录一次就够了。凭证存在你本机，下次开机、换个会话都还在——不用反复授权，更不用为每个套件手搓一遍登录。飞书已通，其余三套走同一种方式，下一版就位。",
-        "en": "Log in once and you're done. The token lives on your machine and survives restarts and new sessions — no re-authenticating, and no hand-built login per suite. Feishu is live; the other three arrive the same way next release."
+        "zh": "登录一次就够了。凭证存在你本机，下次开机、换个会话都还在——不用反复授权，更不用为每个套件手搓一遍登录。飞书/钉钉/企微已通，腾讯文档走同一种方式，下一版就位。",
+        "en": "Log in once and you're done. The token lives on your machine and survives restarts and new sessions — no re-authenticating, and no hand-built login per suite. Feishu, DingTalk and WeCom are live; Tencent Docs arrives the same way next release."
       },
       "chips": [
-        "› 飞书已通",
+        "› 飞书/钉钉/企微已通",
         "› 凭证本地存好",
-        "› 其余三套在路上"
+        "› 腾讯文档在路上"
       ]
     },
     {
@@ -50,20 +51,20 @@
     {
       "title": { "zh": "4 套办公套件，一种命令写法", "en": "Four office suites, one command grammar" },
       "body": {
-        "zh": "飞书、钉钉、企微、腾讯文档——四家各自一套接口和登录。suiter 的设计是让四家共用同一种命令写法：登录、读取、写入都一样。飞书已通，其余三套复用同一套登录与缓存，下一版接入。",
-        "en": "Feishu, DingTalk, WeCom, Tencent Docs — four suites, each with its own API and login. suiter is designed so all four share one command shape: login, read and write work the same way. Feishu is live; the other three reuse the same login and cache, arriving next release."
+        "zh": "飞书、钉钉、企微、腾讯文档——四家各自一套接口和登录。suiter 的设计是让四家共用同一种命令写法：登录、读取、写入都一样。飞书/钉钉/企微已通，腾讯文档复用同一套登录与缓存，下一版接入。",
+        "en": "Feishu, DingTalk, WeCom, Tencent Docs — four suites, each with its own API and login. suiter is designed so all four share one command shape: login, read and write work the same way. Feishu, DingTalk and WeCom are live; Tencent Docs reuses the same login and cache, arriving next release."
       },
       "chips": [
         "› 4 套收敛",
         "› 同一种命令写法",
-        "› 飞书先行"
+        "› 3 套已通"
       ]
     },
     {
       "title": { "zh": "接的是你真正在用的那四家", "en": "It talks to the four you actually use" },
       "body": {
-        "zh": "能让 agent 读写 Google Workspace 的工具不少，可 CN 开发者真正活在飞书、钉钉、企微、腾讯文档里——那些数据外面的工具够不到。suiter 为这四家而生，飞书已通、其余在路上，全程在本机跑、不连云，你的 agent 在你自己的办公数据上干活。",
-        "en": "Plenty of tools let an agent read Google Workspace — but CN devs actually live in Feishu, DingTalk, WeCom and Tencent Docs, and that data is out of reach for outside tools. suiter is built for those four — Feishu live, the rest on the way — runs entirely on your machine with no cloud, and lets your agent work on your own office data."
+        "zh": "能让 agent 读写 Google Workspace 的工具不少，可 CN 开发者真正活在飞书、钉钉、企微、腾讯文档里——那些数据外面的工具够不到。suiter 为这四家而生，飞书/钉钉/企微已通、腾讯文档在路上，全程在本机跑、不连云，你的 agent 在你自己的办公数据上干活。",
+        "en": "Plenty of tools let an agent read Google Workspace — but CN devs actually live in Feishu, DingTalk, WeCom and Tencent Docs, and that data is out of reach for outside tools. suiter is built for those four — Feishu, DingTalk and WeCom live, Tencent Docs on the way — runs entirely on your machine with no cloud, and lets your agent work on your own office data."
       },
       "chips": [
         "› 接 CN 四家",

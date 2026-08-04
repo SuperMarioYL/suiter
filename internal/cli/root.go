@@ -3,8 +3,11 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -63,8 +66,11 @@ func NewRoot() *cobra.Command {
 	root.AddCommand(newSuitesCommand(reg))
 	root.AddCommand(newFeishuCommand(reg))
 	root.AddCommand(newAgentCommand())
-	root.AddCommand(newStubSuiteCommand("dingtalk", "钉钉 (DingTalk) — m2"))
-	root.AddCommand(newStubSuiteCommand("wework", "企业微信 (WeCom) — m2"))
+	// m2: dingtalk + wework ride the generic suite dispatcher — real
+	// implementations behind the Suite interface + registry, zero per-suite
+	// CLI glue. tencentdocs stays a stub until m3.
+	root.AddCommand(newSuiteCommand(reg, "dingtalk", "钉钉 (DingTalk) — calendar list/create"))
+	root.AddCommand(newSuiteCommand(reg, "wework", "企业微信 (WeCom) — message send/read"))
 	root.AddCommand(newStubSuiteCommand("tencentdocs", "腾讯文档 (Tencent Docs) — m3"))
 
 	return root
@@ -125,13 +131,84 @@ func newSuitesCommand(reg *suite.Registry) *cobra.Command {
 	}
 }
 
-// newStubSuiteCommand is a stub suite command group for m2/m3 suites.
+// newSuiteCommand builds the unified `suiter <suite> <kind> <verb> [id]` tree
+// for any registered suite via the shared Suite interface + registry. This is
+// the m2 unification primitive: a suite's verbs are read/write on its
+// registered Suite, NOT hand-rolled cobra wiring — so wiring dingtalk calendar
+// and wework message took zero per-suite CLI glue. Grammar:
+//
+//	suiter <suite> <kind> read  [id]            → suite.Read(kind, id)
+//	suiter <suite> <kind> list  [id]            → suite.Read(kind, id)
+//	suiter <suite> <kind> get   [id]            → suite.Read(kind, id)
+//	suiter <suite> <kind> create [id]           → suite.Write(kind, id, stdin)
+//	suiter <suite> <kind> send   [id]           → suite.Write(kind, id, stdin)
+//
+// e.g. `suiter dingtalk calendar list --json`, `suiter wework message read <id> --json`.
+func newSuiteCommand(reg *suite.Registry, name, short string) *cobra.Command {
+	return &cobra.Command{
+		Use:   name,
+		Short: short,
+		Args:  cobra.MinimumNArgs(2), // <kind> <verb> at minimum
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, ok := reg.Get(name)
+			if !ok {
+				return fmt.Errorf("%s suite not registered", name)
+			}
+			kind := args[0]
+			verb := args[1]
+			id := ""
+			if len(args) >= 3 {
+				id = args[2]
+			}
+			ctx := context.Background()
+			out := cmd.OutOrStdout()
+			jsonFlag, _ := cmd.Flags().GetBool("json")
+			switch verb {
+			case "read", "list", "get":
+				body, err := s.Read(ctx, kind, id)
+				if err != nil {
+					return err
+				}
+				if jsonFlag {
+					var pretty bytes.Buffer
+					if err := json.Indent(&pretty, body, "", "  "); err == nil {
+						fmt.Fprintln(out, pretty.String())
+						return nil
+					}
+				}
+				fmt.Fprintln(out, string(body))
+				return nil
+			case "create", "send", "write":
+				body, err := io.ReadAll(cmd.InOrStdin())
+				if err != nil {
+					return fmt.Errorf("%s: read stdin: %w", name, err)
+				}
+				idOut, err := s.Write(ctx, kind, id, body)
+				if err != nil {
+					return err
+				}
+				if jsonFlag {
+					enc := json.NewEncoder(out)
+					enc.SetIndent("", "  ")
+					_ = enc.Encode(map[string]string{"id": idOut})
+					return nil
+				}
+				fmt.Fprintln(out, idOut)
+				return nil
+			default:
+				return fmt.Errorf("%s: unknown verb %q (read|list|get|create|send)", name, verb)
+			}
+		},
+	}
+}
+
+// newStubSuiteCommand is a stub suite command group for m3 suites (tencentdocs).
 func newStubSuiteCommand(name, short string) *cobra.Command {
 	return &cobra.Command{
 		Use:   name,
 		Short: short,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("%s: subcommands land in m2/m3 (see roadmap)", name)
+			return fmt.Errorf("%s: subcommands land in m3 (see roadmap)", name)
 		},
 	}
 }
