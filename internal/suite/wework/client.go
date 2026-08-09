@@ -183,6 +183,15 @@ func (c *Client) cachedToken(ctx context.Context) (string, error) {
 	if tok.AccessToken == "" {
 		return "", fmt.Errorf("wework: empty cached token (run `suiter login wework`)")
 	}
+	// A token cached >2h ago (WeCom app access_token expires ~7200s) used to be
+	// returned unconditionally and WeCom answered errcode 42001 with an opaque
+	// "wework: message send errcode=42001" error. Treat staleness locally —
+	// mirror the feishu fix: if the cached token is past its ExpiresIn, ask the
+	// user to re-login instead of sending a dead token. Full refresh-token logic
+	// is a later feature; this just stops silent use of stale tokens.
+	if tok.ExpiresIn > 0 && time.Now().Unix()-tok.ObtainedAt >= tok.ExpiresIn {
+		return "", fmt.Errorf("wework: token expired (re-run `suiter login wework`)")
+	}
 	return tok.AccessToken, nil
 }
 

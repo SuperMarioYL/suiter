@@ -275,6 +275,15 @@ func (c *Client) cachedToken(ctx context.Context) (string, error) {
 	if tok.AccessToken == "" {
 		return "", fmt.Errorf("dingtalk: empty cached token (run `suiter login dingtalk`)")
 	}
+	// A token cached hours/days ago (DingTalk userAccessToken expires ~2h) used
+	// to be returned unconditionally and DingTalk answered an expired-token
+	// error with an opaque message. Treat staleness locally — mirror the feishu
+	// fix: if the cached token is past its ExpiresIn, ask the user to re-login
+	// instead of sending a dead token. Full refresh-token logic is a later
+	// feature; this just stops silent use of stale tokens.
+	if tok.ExpiresIn > 0 && time.Now().Unix()-tok.ObtainedAt >= tok.ExpiresIn {
+		return "", fmt.Errorf("dingtalk: token expired (re-run `suiter login dingtalk`)")
+	}
 	return tok.AccessToken, nil
 }
 

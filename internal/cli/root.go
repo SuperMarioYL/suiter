@@ -65,13 +65,14 @@ func NewRoot() *cobra.Command {
 	root.AddCommand(newLoginCommand(reg, store))
 	root.AddCommand(newSuitesCommand(reg))
 	root.AddCommand(newFeishuCommand(reg))
-	root.AddCommand(newAgentCommand())
+	root.AddCommand(newAgentCommand(reg))
 	// m2: dingtalk + wework ride the generic suite dispatcher — real
 	// implementations behind the Suite interface + registry, zero per-suite
-	// CLI glue. tencentdocs stays a stub until m3.
+	// CLI glue. m3: tencentdocs joins the same dispatcher now that its
+	// Login/Read/Write are real (sheet read/write via net/http + standard OAuth2).
 	root.AddCommand(newSuiteCommand(reg, "dingtalk", "钉钉 (DingTalk) — calendar list/create"))
 	root.AddCommand(newSuiteCommand(reg, "wework", "企业微信 (WeCom) — message send/read"))
-	root.AddCommand(newStubSuiteCommand("tencentdocs", "腾讯文档 (Tencent Docs) — m3"))
+	root.AddCommand(newSuiteCommand(reg, "tencentdocs", "腾讯文档 (Tencent Docs) — sheet read/write"))
 
 	return root
 }
@@ -199,16 +200,6 @@ func newSuiteCommand(reg *suite.Registry, name, short string) *cobra.Command {
 				return fmt.Errorf("%s: unknown verb %q (read|list|get|create|send)", name, verb)
 			}
 		},
-	}
+		}
 }
 
-// newStubSuiteCommand is a stub suite command group for m3 suites (tencentdocs).
-func newStubSuiteCommand(name, short string) *cobra.Command {
-	return &cobra.Command{
-		Use:   name,
-		Short: short,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("%s: subcommands land in m3 (see roadmap)", name)
-		},
-	}
-}

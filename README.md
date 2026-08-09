@@ -106,7 +106,7 @@ suiter feishu doc read <doc-id> --json | your-agent summarize
 # 4) 列出已注册套件
 suiter suites
 
-# 5) m3 端到端 loop（占位）：读飞书 → GLM 摘要 → 钉钉日历事件
+# 5) m3 端到端 star-moment：读飞书 → GLM 摘要 → 钉钉日历事件
 suiter agent run summarize-and-schedule <doc-id>
 ```
 
@@ -114,34 +114,33 @@ suiter agent run summarize-and-schedule <doc-id>
 
 <h2><img src="https://api.iconify.design/tabler:layout-grid.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> 套件</h2>
 
-| 套件 | 状态 | v0.2 动词 |
+| 套件 | 状态 | 动词 |
 |---|---|---|
 | 飞书 feishu | m1 ✓ | `login`，`doc read` |
 | 钉钉 dingtalk | m2 ✓ | `login`，`calendar list/get/create` |
 | 企微 wework | m2 ✓ | `login`，`message send/read` |
-| 腾讯文档 tencentdocs | m3 | `login`，`sheet read/write` |
+| 腾讯文档 tencentdocs | m3 ✓ | `login`，`sheet read/write` |
 
 每个套件实现同一个 `Suite` 接口（`Name` / `Login` / `Read` / `Write`），挂在同一个 `Suite` 注册表后；新增套件动词零新增 CLI 胶水——这就是统一抽象要证明的事。
 
 <h2><img src="https://api.iconify.design/tabler:robot.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> Agent</h2>
 
-明星时刻（m3）是一个 60 秒的 loop：`suiter feishu doc read <id> --json` → GLM/DeepSeek `summarize` → `suiter dingtalk calendar create`。v0.2 已在每个动词上开放 `--json` stdio 且把 钉钉/企微 真正接通到同一套 `suiter <suite> <verb>` 语法后，Agent 今天就能 orchestrate 跨三套；`suiter agent run summarize-and-schedule` 在 m3 把 loop 端到端串起来。完整的 MCP server 仍在路线——v0.2 先把统一抽象坐实成 3 套真实现，再封 MCP。
+明星时刻（m3）是一个 60 秒的 loop：`suiter feishu doc read <id> --json` → GLM/DeepSeek `summarize` → `suiter dingtalk calendar create`。v0.2 在每个动词上开放 `--json` stdio 且把 钉钉/企微 真正接通到同一套 `suiter <suite> <verb>` 语法后，Agent 今天就能 orchestrate 跨三套；v0.3 把 `suiter agent run summarize-and-schedule` 端到端串起来——读飞书文档 → GLM/DeepSeek 摘要 → 写钉钉日历事件，一个命令搞定。完整的 MCP server 仍在路线——先把统一抽象坐实成 4 套真实现，再封 MCP。
 
 <h2><img src="https://api.iconify.design/tabler:photo.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> Demo</h2>
 
-**suiter: 4 OAuth → 1 CLI in 60s（m2 统一 —— 3 套件，1 种 login 语法）**
+**suiter: 4 OAuth → 1 CLI in 60s（m3 agent loop —— 读飞书 → GLM 摘要 → 钉钉日历）**
 
 ![demo](assets/demo.gif)
 
 > 由 CI 从 [`docs/demo.tape`](./docs/demo.tape)（vhs）渲染。手动刷新用 `demo` workflow。上面 gif 跑的是无凭证也能渲染的统一语法巡览；完整 60s 录屏脚本如下：
 
 ```text
-suiter login feishu    # one OAuth loopback, token cached in ~/.suiter/tokens.json
-suiter login dingtalk  # same flow, same shared TokenStore
-suiter login wework    # same flow, same shared TokenStore
+suiter login feishu       # one OAuth loopback, token cached in ~/.suiter/tokens.json
+suiter login dingtalk     # same flow, same shared TokenStore (m2 unified)
 suiter feishu doc read <id> --json          # agent-readable doc body
+suiter agent run summarize-and-schedule <feishu-doc-id>   # read 飞书 → GLM summarize → 钉钉 calendar event (m3 star-moment)
 suiter dingtalk calendar list --json        # unified verb, same grammar, no per-suite CLI glue
-suiter wework message read <id> --json      # 3 suites, 1 `suiter <suite> <verb>` grammar
 ```
 
 <h2><img src="https://api.iconify.design/tabler:adjustments.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> 配置</h2>
@@ -157,8 +156,11 @@ suiter wework message read <id> --json      # 3 suites, 1 `suiter <suite> <verb>
 | `wework_corp_id` | `SUITER_WEWORK_CORP_ID` | `""` | 企微 corpId（v0.2 已通） |
 | `wework_agent_id` | `SUITER_WEWORK_AGENT_ID` | `""` | 企微 agentId（v0.2 已通） |
 | `wework_secret` | `SUITER_WEWORK_SECRET` | `""` | 企微 secret（v0.2 已通） |
-| `tencentdocs_client_id` | `SUITER_TENCENTDOCS_CLIENT_ID` | `""` | 腾讯文档 clientId（m3） |
-| `tencentdocs_client_secret` | `SUITER_TENCENTDOCS_CLIENT_SECRET` | `""` | 腾讯文档 clientSecret（m3） |
+| `tencentdocs_client_id` | `SUITER_TENCENTDOCS_CLIENT_ID` | `""` | 腾讯文档 clientId（v0.3 已通） |
+| `tencentdocs_client_secret` | `SUITER_TENCENTDOCS_CLIENT_SECRET` | `""` | 腾讯文档 clientSecret（v0.3 已通） |
+| `llm_base_url` | `SUITER_LLM_BASE_URL` | GLM `open.bigmodel.cn` | OpenAI-compatible 模型根（GLM/DeepSeek） |
+| `llm_api_key` | `SUITER_LLM_API_KEY` | `""` | GLM/DeepSeek API key（`agent run` 摘要步骤必需） |
+| `llm_model` | `SUITER_LLM_MODEL` | `""` | 模型名（如 `glm-4.6` / `deepseek-chat`） |
 
 token 缓存在 `~/.suiter/tokens.json`（0600 权限，单 dev 本机；多用户 / 云 vault 明确 out of scope）。
 
@@ -166,7 +168,7 @@ token 缓存在 `~/.suiter/tokens.json`（0600 权限，单 dev 本机；多用�
 
 - [x] **m1** — `suiter login feishu` + `suiter feishu doc read <id> --json`；token 缓存到 `~/.suiter/tokens.json`，跨 session 存活。
 - [x] **m2** — 钉钉（`calendar list/get/create`）+ 企微（`message send/read`）挂在同一套 `suiter <suite> <verb>` 语法 + 共享 `TokenStore` 后；通用 dispatcher 让新增套件动词零新增 CLI 胶水，3 套统一证明完毕。
-- [ ] **m3** — 腾讯文档（`sheet read`）+ GLM/DeepSeek 摘要器；端到端 `suiter agent run summarize-and-schedule`。
+- [x] **m3** — 腾讯文档（`sheet read/write`）+ GLM/DeepSeek 摘要器；端到端 `suiter agent run summarize-and-schedule`（读飞书 → 摘要 → 钉钉日历事件）。v0.3 同时修掉 dingtalk/wework 缓存 token 过期未检的缺陷（镜像 v0.2 的 feishu 修复）。
 - [ ] 未来 — MCP server、团队 auth、托管 token vault。
 
 推送后建议加 repo topics：

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/oauth2"
 
@@ -180,6 +181,41 @@ func TestCachedToken_Guards(t *testing.T) {
 	c2 := withToken(&Client{}, suite.Token{AccessToken: ""})
 	if _, err := c2.cachedToken(context.Background()); err == nil {
 		t.Fatal("want error when cached token is empty")
+	}
+}
+
+// TestCachedToken_Expiry proves fix-wework-cached-token-expiry: a token past
+// its ExpiresIn is rejected locally instead of being sent to WeCom (errcode
+// 42001) — the same defect class fixed for feishu in v0.2.0, left un-fixed in
+// the wework client shipped the SAME version.
+func TestCachedToken_Expiry(t *testing.T) {
+	now := time.Now().Unix()
+	cases := []struct {
+		name string
+		tok  suite.Token
+		want string
+	}{
+		{"fresh", suite.Token{AccessToken: "at", ExpiresIn: 7200, ObtainedAt: now}, ""},
+		{"expired", suite.Token{AccessToken: "at", ExpiresIn: 60, ObtainedAt: now - 120}, "token expired"},
+		{"no-expiry", suite.Token{AccessToken: "at", ExpiresIn: 0, ObtainedAt: now - 999999}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := withToken(&Client{}, tc.tok)
+			got, err := c.cachedToken(context.Background())
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("cachedToken: want nil err, got %v", err)
+				}
+				if got != tc.tok.AccessToken {
+					t.Fatalf("cachedToken = %q, want %q", got, tc.tok.AccessToken)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("cachedToken err = %v, want substring %q", err, tc.want)
+			}
+		})
 	}
 }
 

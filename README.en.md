@@ -106,7 +106,7 @@ suiter feishu doc read <doc-id> --json | your-agent summarize
 # 4) list registered suites
 suiter suites
 
-# 5) m3 end-to-end loop (stub): read 飞书 → GLM summarize → 钉钉 calendar event
+# 5) m3 end-to-end star moment: read 飞书 → GLM summarize → 钉钉 calendar event
 suiter agent run summarize-and-schedule <doc-id>
 ```
 
@@ -114,34 +114,33 @@ More in [`examples/`](./examples).
 
 <h2><img src="https://api.iconify.design/tabler:layout-grid.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> Suites</h2>
 
-| Suite | Status | v0.2 verbs |
+| Suite | Status | Verbs |
 |---|---|---|
 | 飞书 feishu | m1 ✓ | `login`, `doc read` |
 | 钉钉 dingtalk | m2 ✓ | `login`, `calendar list/get/create` |
 | 企微 wework | m2 ✓ | `login`, `message send/read` |
-| 腾讯文档 tencentdocs | m3 | `login`, `sheet read/write` |
+| 腾讯文档 tencentdocs | m3 ✓ | `login`, `sheet read/write` |
 
 Every suite implements the same `Suite` interface (`Name` / `Login` / `Read` / `Write`) behind one `Suite` registry — adding a suite verb takes zero new CLI glue, which is the whole thesis the unification has to prove.
 
 <h2><img src="https://api.iconify.design/tabler:robot.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> Agent</h2>
 
-The star moment (m3) is a 60-second loop: `suiter feishu doc read <id> --json` → GLM/DeepSeek `summarize` → `suiter dingtalk calendar create`. v0.2 already exposes `--json` stdio on every verb and wires 钉钉/企微 for real under the same `suiter <suite> <verb>` grammar, so an agent orchestrates across three suites today; `suiter agent run summarize-and-schedule` wires the loop end-to-end in m3. A full MCP server stays on the roadmap — v0.2 first makes the unified abstraction real across 3 suites, then seals it as MCP.
+The star moment (m3) is a 60-second loop: `suiter feishu doc read <id> --json` → GLM/DeepSeek `summarize` → `suiter dingtalk calendar create`. v0.2 already exposes `--json` stdio on every verb and wires 钉钉/企微 for real under the same `suiter <suite> <verb>` grammar, so an agent orchestrates across three suites today; v0.3 wires `suiter agent run summarize-and-schedule` end-to-end — read a 飞书 doc → GLM/DeepSeek summarize → write a 钉钉 calendar event, one command. A full MCP server stays on the roadmap — the unified abstraction is now real across all 4 suites, then seals as MCP.
 
 <h2><img src="https://api.iconify.design/tabler:photo.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> Demo</h2>
 
-**suiter: 4 OAuth → 1 CLI in 60s (m2 unified — 3 suites, 1 login grammar)**
+**suiter: 4 OAuth → 1 CLI in 60s (m3 agent loop — read 飞书 → GLM summarize → 钉钉 calendar)**
 
 ![demo](assets/demo.gif)
 
 > Rendered by CI from [`docs/demo.tape`](./docs/demo.tape) (vhs). Refresh manually via the `demo` workflow. The gif above runs the no-credentials unified-grammar tour; the full 60s screencast script:
 
 ```text
-suiter login feishu    # one OAuth loopback, token cached in ~/.suiter/tokens.json
-suiter login dingtalk  # same flow, same shared TokenStore
-suiter login wework    # same flow, same shared TokenStore
+suiter login feishu       # one OAuth loopback, token cached in ~/.suiter/tokens.json
+suiter login dingtalk     # same flow, same shared TokenStore (m2 unified)
 suiter feishu doc read <id> --json          # agent-readable doc body
+suiter agent run summarize-and-schedule <feishu-doc-id>   # read 飞书 → GLM summarize → 钉钉 calendar event (m3 star moment)
 suiter dingtalk calendar list --json        # unified verb, same grammar, no per-suite CLI glue
-suiter wework message read <id> --json      # 3 suites, 1 `suiter <suite> <verb>` grammar
 ```
 
 <h2><img src="https://api.iconify.design/tabler:adjustments.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> Config</h2>
@@ -157,8 +156,11 @@ Priority: `--config <path>` flag > env vars > `~/.suiter/config.yaml`.
 | `wework_corp_id` | `SUITER_WEWORK_CORP_ID` | `""` | 企微 corpId (live in v0.2) |
 | `wework_agent_id` | `SUITER_WEWORK_AGENT_ID` | `""` | 企微 agentId (live in v0.2) |
 | `wework_secret` | `SUITER_WEWORK_SECRET` | `""` | 企微 secret (live in v0.2) |
-| `tencentdocs_client_id` | `SUITER_TENCENTDOCS_CLIENT_ID` | `""` | 腾讯文档 clientId (m3) |
-| `tencentdocs_client_secret` | `SUITER_TENCENTDOCS_CLIENT_SECRET` | `""` | 腾讯文档 clientSecret (m3) |
+| `tencentdocs_client_id` | `SUITER_TENCENTDOCS_CLIENT_ID` | `""` | 腾讯文档 clientId (live in v0.3) |
+| `tencentdocs_client_secret` | `SUITER_TENCENTDOCS_CLIENT_SECRET` | `""` | 腾讯文档 clientSecret (live in v0.3) |
+| `llm_base_url` | `SUITER_LLM_BASE_URL` | GLM `open.bigmodel.cn` | OpenAI-compatible model root (GLM/DeepSeek) |
+| `llm_api_key` | `SUITER_LLM_API_KEY` | `""` | GLM/DeepSeek API key (required for the `agent run` summarize step) |
+| `llm_model` | `SUITER_LLM_MODEL` | `""` | model name (e.g. `glm-4.6` / `deepseek-chat`) |
 
 Tokens are cached at `~/.suiter/tokens.json` (0600 perms, single dev, local machine; multi-user / cloud vault explicitly out of scope for v0.1).
 
@@ -166,7 +168,7 @@ Tokens are cached at `~/.suiter/tokens.json` (0600 perms, single dev, local mach
 
 - [x] **m1** — `suiter login feishu` + `suiter feishu doc read <id> --json`; token cached at `~/.suiter/tokens.json`, survives across sessions.
 - [x] **m2** — 钉钉 (`calendar list/get/create`) + 企微 (`message send/read`) behind the same `suiter <suite> <verb>` grammar + shared `TokenStore`; a generic dispatcher means adding a suite verb takes zero new CLI glue. The unify-3-suites thesis is proven.
-- [ ] **m3** — 腾讯文档 (`sheet read`) + GLM/DeepSeek summarizer; end-to-end `suiter agent run summarize-and-schedule`.
+- [x] **m3** — 腾讯文档 (`sheet read/write`) + GLM/DeepSeek summarizer; end-to-end `suiter agent run summarize-and-schedule` (read 飞书 → summarize → 钉钉 calendar event). v0.3 also fixes the dingtalk/wework cached-token-expiry gap (mirroring the v0.2 feishu fix).
 - [ ] future — MCP server, team auth, hosted token vault.
 
 After pushing, set repo topics:

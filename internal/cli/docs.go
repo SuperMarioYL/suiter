@@ -56,28 +56,3 @@ func newFeishuCommand(reg *suite.Registry) *cobra.Command {
 	feishuCmd.AddCommand(docCmd)
 	return feishuCmd
 }
-
-// newAgentCommand builds the `suiter agent run <loop>` tree.
-// m3 stub: `agent run summarize-and-schedule <feishu-doc-id>` wires the
-// end-to-end loop (read 飞书 → GLM summarize → write 钉钉 calendar event).
-func newAgentCommand() *cobra.Command {
-	agentCmd := &cobra.Command{
-		Use:   "agent",
-		Short: "Agent loops (m3)",
-	}
-	runCmd := &cobra.Command{
-		Use:   "run",
-		Short: "Run an agent loop",
-	}
-	sumSchedCmd := &cobra.Command{
-		Use:   "summarize-and-schedule <feishu-doc-id>",
-		Short: "Read a 飞书 doc → GLM summarize → 钉钉 calendar event (m3)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("agent: summarize-and-schedule lands in m3 (read 飞书 doc → summarize → write 钉钉 calendar event)")
-		},
-	}
-	runCmd.AddCommand(sumSchedCmd)
-	agentCmd.AddCommand(runCmd)
-	return agentCmd
-}

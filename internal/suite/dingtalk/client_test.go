@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/oauth2"
 
@@ -207,6 +208,41 @@ func TestCachedToken_Guards(t *testing.T) {
 	c3 := withToken(&Client{}, suite.Token{AccessToken: "at"})
 	if got, err := c3.cachedToken(context.Background()); err != nil || got != "at" {
 		t.Fatalf("cachedToken = (%q,%v), want (at,nil)", got, err)
+	}
+}
+
+// TestCachedToken_Expiry proves fix-dingtalk-cached-token-expiry: a token past
+// its ExpiresIn is rejected locally instead of being sent to die at DingTalk
+// (the same defect class fixed for feishu in v0.2.0, left un-fixed in the
+// dingtalk client shipped the SAME v0.2.0 version).
+func TestCachedToken_Expiry(t *testing.T) {
+	now := time.Now().Unix()
+	cases := []struct {
+		name string
+		tok  suite.Token
+		want string // "" => want success; otherwise substring of the error
+	}{
+		{"fresh", suite.Token{AccessToken: "at", ExpiresIn: 7200, ObtainedAt: now}, ""},
+		{"expired", suite.Token{AccessToken: "at", ExpiresIn: 60, ObtainedAt: now - 120}, "token expired"},
+		{"no-expiry", suite.Token{AccessToken: "at", ExpiresIn: 0, ObtainedAt: now - 999999}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := withToken(&Client{}, tc.tok)
+			got, err := c.cachedToken(context.Background())
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("cachedToken: want nil err, got %v", err)
+				}
+				if got != tc.tok.AccessToken {
+					t.Fatalf("cachedToken = %q, want %q", got, tc.tok.AccessToken)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("cachedToken err = %v, want substring %q", err, tc.want)
+			}
+		})
 	}
 }
 
