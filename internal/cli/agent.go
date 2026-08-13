@@ -120,13 +120,17 @@ func summarizeAndSchedule(ctx context.Context, reg *suite.Registry, sm summarize
 func calendarEventFromSummary(summary string) ([]byte, error) {
 	now := time.Now()
 	title := summary
-	if len(title) > 80 {
-		title = title[:80]
+	// fix-calendar-title-utf8-truncation: truncate by rune count, not bytes.
+	// A Chinese summary is ~3 bytes/rune, so the old title[:80] byte slice
+	// landed mid-rune → invalid UTF-8 → json.Marshal emitted U+FFFD mojibake
+	// in the 钉钉 calendar event title. Rune-safe truncation stays valid UTF-8.
+	if r := []rune(title); len(r) > 80 {
+		title = string(r[:80])
 	}
 	evt := map[string]any{
-		"summary": title,
-		"start":   map[string]string{"date": now.Add(1 * time.Hour).Format("2006-01-02 15:04:05")},
-		"end":     map[string]string{"date": now.Add(2 * time.Hour).Format("2006-01-02 15:04:05")},
+		"summary":     title,
+		"start":       map[string]string{"date": now.Add(1 * time.Hour).Format("2006-01-02 15:04:05")},
+		"end":         map[string]string{"date": now.Add(2 * time.Hour).Format("2006-01-02 15:04:05")},
 		"description": summary,
 	}
 	return json.Marshal(evt)
@@ -134,8 +138,10 @@ func calendarEventFromSummary(summary string) ([]byte, error) {
 
 func truncate(s string, n int) string {
 	s = strings.TrimSpace(s)
-	if len(s) <= n {
+	// fix-calendar-title-utf8-truncation: rune-safe so a multibyte summary is
+	// never split mid-rune (the stdout `summary:` line would otherwise mojibake).
+	if len([]rune(s)) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return string([]rune(s)[:n]) + "…"
 }

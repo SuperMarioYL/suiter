@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -54,6 +55,19 @@ func NewRoot() *cobra.Command {
 		_ = viper.ReadInConfig() // best-effort; config is optional
 		return nil
 	}
+
+	// fix-config-credentials-ignored-before-read: viper does NOT auto-read the
+	// config file on GetString, but buildRegistry (below) bakes the credential
+	// strings into the suite clients. PersistentPreRunE only runs during
+	// Execute() — AFTER NewRoot returns — so a credential set ONLY in the
+	// config file was absent when clients were built and every `suiter login`
+	// errored with "credentials not set". Read the config here, before
+	// buildRegistry, so config-file credentials reach the clients. Env-var
+	// override still wins (AutomaticEnv is live above). The --config flag is
+	// not parsed by cobra yet at construction time, so resolve it from os.Args
+	// so the override applies to credential capture; PersistentPreRunE re-reads
+	// (idempotent) to serve runtime viper lookups such as LLM config.
+	readConfigBeforeBuild(os.Args)
 
 	store, err := config.NewStore()
 	if err != nil {
@@ -116,6 +130,38 @@ func buildRegistry(store *config.Store) *suite.Registry {
 	reg.Register(tencentClient)
 
 	return reg
+}
+
+// readConfigBeforeBuild resolves the --config override from args (cobra has not
+// parsed flags yet at NewRoot time) and best-effort reads the config file so
+// config-file credentials are visible when buildRegistry bakes them into the
+// suite clients. See fix-config-credentials-ignored-before-read. The read is
+// best-effort: a missing config file is not an error (config is optional; env
+// vars still supply credentials via AutomaticEnv).
+func readConfigBeforeBuild(args []string) {
+	if cfg := configPathFromArgs(args); cfg != "" {
+		viper.SetConfigFile(cfg)
+	}
+	_ = viper.ReadInConfig()
+}
+
+// configPathFromArgs scans args for --config, returning the path. It handles
+// both "--config <path>" and "--config=<path>" forms. Cobra has not parsed
+// flags at NewRoot time, so this manual scan is how the --config override is
+// applied to credential capture. Returns "" if --config is absent.
+func configPathFromArgs(args []string) string {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--config":
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		case strings.HasPrefix(a, "--config="):
+			return strings.TrimPrefix(a, "--config=")
+		}
+	}
+	return ""
 }
 
 // newSuitesCommand lists registered suites.
@@ -200,6 +246,5 @@ func newSuiteCommand(reg *suite.Registry, name, short string) *cobra.Command {
 				return fmt.Errorf("%s: unknown verb %q (read|list|get|create|send)", name, verb)
 			}
 		},
-		}
+	}
 }
-

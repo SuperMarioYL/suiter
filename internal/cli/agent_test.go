@@ -3,9 +3,11 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/SuperMarioYL/suiter/internal/suite"
 )
@@ -14,8 +16,10 @@ import (
 // records nothing — used to prove the agent loop's read stage.
 type agentFeishu struct{ docBody []byte }
 
-func (f *agentFeishu) Name() string                                   { return "feishu" }
-func (f *agentFeishu) Login(context.Context) (suite.Token, error)     { return suite.Token{}, errors.New("unused") }
+func (f *agentFeishu) Name() string { return "feishu" }
+func (f *agentFeishu) Login(context.Context) (suite.Token, error) {
+	return suite.Token{}, errors.New("unused")
+}
 func (f *agentFeishu) Read(_ context.Context, _, _ string) ([]byte, error) { return f.docBody, nil }
 func (f *agentFeishu) Write(context.Context, string, string, []byte) (string, error) {
 	return "", errors.New("feishu write unused")
@@ -28,8 +32,10 @@ type agentDingtalk struct {
 	gotKind string
 }
 
-func (d *agentDingtalk) Name() string                               { return "dingtalk" }
-func (d *agentDingtalk) Login(context.Context) (suite.Token, error) { return suite.Token{}, errors.New("unused") }
+func (d *agentDingtalk) Name() string { return "dingtalk" }
+func (d *agentDingtalk) Login(context.Context) (suite.Token, error) {
+	return suite.Token{}, errors.New("unused")
+}
 func (d *agentDingtalk) Read(context.Context, string, string) ([]byte, error) {
 	return nil, errors.New("dingtalk read unused")
 }
@@ -135,6 +141,71 @@ func TestTruncate(t *testing.T) {
 		t.Fatalf("truncate(hello,10) = %q, want hello", got)
 	}
 	if got := truncate("hello world", 5); !strings.HasPrefix(got, "hello") {
+		t.Fatalf("truncate(hello world,5) = %q, want hello…", got)
+	}
+}
+
+// TestCalendarEventFromSummary_UTF8Truncation (fix-calendar-title-utf8-truncation)
+// proves a long summary — especially a Chinese one (~3 bytes/rune) — is
+// truncated to <=80 runes AND stays valid UTF-8. Before the fix, title[:80]
+// sliced mid-rune → invalid UTF-8 → json.Marshal emitted U+FFFD mojibake in the
+// 钉钉 calendar event title.
+func TestCalendarEventFromSummary_UTF8Truncation(t *testing.T) {
+	cases := []struct {
+		name    string
+		summary string
+	}{
+		{"ascii-over-80-runes", strings.Repeat("a", 200)},
+		{"chinese-over-80-runes", strings.Repeat("钉", 100)}, // 100 runes = 300 bytes; old title[:80] hit mid-rune at byte 80 (rune 27)
+		{"chinese-mixed", "会议纪要：" + strings.Repeat("项目进展", 50)},
+		{"under-limit", strings.Repeat("钉", 40)}, // 40 runes, must pass through unchanged
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := calendarEventFromSummary(tc.summary)
+			if err != nil {
+				t.Fatalf("calendarEventFromSummary: %v", err)
+			}
+			// The whole JSON body must be valid UTF-8 (no U+FFFD substitution).
+			if !utf8.Valid(body) {
+				t.Fatalf("event body is not valid UTF-8: %q", body)
+			}
+			var evt map[string]any
+			if err := json.Unmarshal(body, &evt); err != nil {
+				t.Fatalf("unmarshal event: %v (body=%s)", err, body)
+			}
+			title, _ := evt["summary"].(string)
+			if !utf8.ValidString(title) {
+				t.Fatalf("title not valid UTF-8: %q", title)
+			}
+			if strings.Contains(title, "\ufffd") { // U+FFFD replacement char from mid-rune slicing
+				t.Fatalf("title contains U+FFFD mojibake from mid-rune slicing: %q", title)
+			}
+			if rc := utf8.RuneCountInString(title); rc > 80 {
+				t.Fatalf("title rune count = %d, want <= 80", rc)
+			}
+		})
+	}
+}
+
+// TestTruncate_RuneSafe (fix-calendar-title-utf8-truncation) proves truncate
+// never splits a multibyte rune and that the ellipsis still appends as one rune.
+func TestTruncate_RuneSafe(t *testing.T) {
+	s := strings.Repeat("钉", 10) // 10 runes, 30 bytes
+	got := truncate(s, 5)
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncate produced invalid UTF-8: %q", got)
+	}
+	// 5 truncated runes + "…" (one rune) = 6 runes total.
+	if rc := utf8.RuneCountInString(got); rc != 6 {
+		t.Fatalf("truncate rune count = %d, want 6 (5 + …)", rc)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Fatalf("truncate = %q, want … suffix", got)
+	}
+
+	// ASCII path must behave identically to the old byte-based implementation.
+	if got := truncate("hello world", 5); got != "hello…" {
 		t.Fatalf("truncate(hello world,5) = %q, want hello…", got)
 	}
 }
