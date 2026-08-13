@@ -1,11 +1,18 @@
 {
   "schema": 1,
-  "content_version": "v0.3.0",
+  "content_version": "v0.4.0",
   "name": "suiter",
   "github": "https://github.com/SuperMarioYL/suiter",
   "host": "suiter.lei6393.com",
-  "lang": { "primary": "zh", "toggle": true },
-  "accent": ["#8b7cf6", "#4d9bff", "#34e5d0"],
+  "lang": {
+    "primary": "zh",
+    "toggle": true
+  },
+  "accent": [
+    "#8b7cf6",
+    "#4d9bff",
+    "#34e5d0"
+  ],
   "hero": {
     "eyebrow": {
       "zh": "4 套归一 · 1 条命令 · agent 读完会自己干活",
@@ -20,12 +27,21 @@
       "en": "One browser auth caches your token; your Feishu docs, DingTalk calendar, WeCom messages and Tencent Docs sheets land in your agent's context as JSON it can read. All four suites are live, and one command runs the full agent loop — read a Feishu doc, summarize it, write a DingTalk calendar event."
     },
     "command": "suiter agent run summarize-and-schedule <doc-id>",
-    "cta": { "zh": "快速开始", "en": "Quickstart" },
-    "ctaGithub": { "zh": "在 GitHub 查看", "en": "View on GitHub" }
+    "cta": {
+      "zh": "快速开始",
+      "en": "Quickstart"
+    },
+    "ctaGithub": {
+      "zh": "在 GitHub 查看",
+      "en": "View on GitHub"
+    }
   },
   "advantages": [
     {
-      "title": { "zh": "读飞书 → AI 摘要 → 写钉钉日历，一条命令", "en": "Read Feishu → AI summarize → write DingTalk calendar, one command" },
+      "title": {
+        "zh": "读飞书 → AI 摘要 → 写钉钉日历，一条命令",
+        "en": "Read Feishu → AI summarize → write DingTalk calendar, one command"
+      },
       "body": {
         "zh": "一条命令就把整条链路跑完：读飞书文档正文 → 让大模型概括 → 在钉钉日历里建一条事件。不用你手动粘过来粘过去，agent 自己把 读 → 想 → 写 串起来，这是 4 套打通后真正想要的明星时刻。",
         "en": "One command runs the whole chain: read a Feishu doc → let the model summarize it → create a DingTalk calendar event. No copying back and forth — the agent wires read → think → write itself, the star moment that's only worth it once all four suites are connected."
@@ -37,7 +53,10 @@
       ]
     },
     {
-      "title": { "zh": "登录一次，跨会话记住", "en": "Log in once, remembered across sessions" },
+      "title": {
+        "zh": "登录一次，跨会话记住",
+        "en": "Log in once, remembered across sessions"
+      },
       "body": {
         "zh": "登录一次就够了。凭证存在你本机，下次开机、换个会话都还在——不用反复授权，更不用为每个套件手搓一遍登录。飞书、钉钉、企微、腾讯文档已全部接通，凭证失效会直接提示你重登，不会拿过期 token 去撞一个看不懂的报错。",
         "en": "Log in once and you're done. The token lives on your machine and survives restarts and new sessions — no re-authenticating, and no hand-built login per suite. Feishu, DingTalk, WeCom and Tencent Docs are all live; a stale token is caught locally with a clear re-login hint instead of an opaque API error."
@@ -49,7 +68,10 @@
       ]
     },
     {
-      "title": { "zh": "4 套办公套件，一种命令写法", "en": "Four office suites, one command grammar" },
+      "title": {
+        "zh": "4 套办公套件，一种命令写法",
+        "en": "Four office suites, one command grammar"
+      },
       "body": {
         "zh": "飞书、钉钉、企微、腾讯文档——四家各自一套接口和登录。suiter 让四家共用同一种命令写法：登录、读取、写入都一样，加一个套件动词零新增命令胶水。4 套已全部落地。",
         "en": "Feishu, DingTalk, WeCom, Tencent Docs — four suites, each with its own API and login. suiter makes all four share one command shape: login, read and write work the same way, and adding a suite verb takes zero new CLI glue. All four are live."
@@ -61,7 +83,10 @@
       ]
     },
     {
-      "title": { "zh": "接的是你真正在用的那四家", "en": "It talks to the four you actually use" },
+      "title": {
+        "zh": "接的是你真正在用的那四家",
+        "en": "It talks to the four you actually use"
+      },
       "body": {
         "zh": "能让 agent 读写 Google Workspace 的工具不少，可 CN 开发者真正活在飞书、钉钉、企微、腾讯文档里——那些数据外面的工具够不到。suiter 为这四家而生，4 套已全部接通，全程在本机跑、不连云，你的 agent 在你自己的办公数据上干活。",
         "en": "Plenty of tools let an agent read Google Workspace — but CN devs actually live in Feishu, DingTalk, WeCom and Tencent Docs, and that data is out of reach for outside tools. suiter is built for those four — all four live — runs entirely on your machine with no cloud, and lets your agent work on your own office data."
@@ -75,7 +100,12 @@
   ],
   "scene": {
     "kind": "hub-nodes",
-    "nodes": ["飞书", "钉钉", "企微", "腾讯文档"]
+    "nodes": [
+      "飞书",
+      "钉钉",
+      "企微",
+      "腾讯文档"
+    ]
   },
   "cta": {
     "headline": {
@@ -86,7 +116,10 @@
       "zh": "开源、MIT、无付费墙。让 agent 读懂你自己的办公数据，这一核心动作永不设墙。",
       "en": "Open source, MIT, no paywall. Letting your agent read your own office data is never gated."
     },
-    "button": { "zh": "在 GitHub 上开始", "en": "Get started on GitHub" }
+    "button": {
+      "zh": "在 GitHub 上开始",
+      "en": "Get started on GitHub"
+    }
   },
   "footer": {
     "tag": {
