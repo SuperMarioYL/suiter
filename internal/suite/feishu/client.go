@@ -283,6 +283,25 @@ func (c *Client) readDocRawContent(ctx context.Context, accessToken, docID strin
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("feishu: doc read status %d: %s", resp.StatusCode, string(raw))
 	}
+	// fix-read-silent-suite-error-envelope: Feishu's docx raw_content endpoint
+	// answers HTTP 200 with {"code":<n>,"msg":"...","data":{"content":"..."}}; on
+	// a doc-not-found / no-permission / API-level error it returns HTTP 200 +
+	// code != 0 (with no data.content). The status check above passes, so
+	// without this guard the error envelope is returned as the doc body (silent
+	// failure on the m1/m3 star-moment path — the agent loop would feed the error
+	// JSON to the GLM summarizer). exchange() (client.go:214) already guards
+	// `tr.Code != 0`; the read path now does too. The raw envelope is still
+	// returned on success so the --json agent-readable contract is unchanged.
+	var env struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return nil, fmt.Errorf("feishu: parse doc read: %w", err)
+	}
+	if env.Code != 0 {
+		return nil, fmt.Errorf("feishu: doc read code=%d msg=%s", env.Code, env.Msg)
+	}
 	return raw, nil
 }
 

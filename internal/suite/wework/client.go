@@ -169,7 +169,26 @@ func (c *Client) messageRead(ctx context.Context, id string) ([]byte, error) {
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
 		c.apiBase+"/cgi-bin/message/get?access_token="+tok+"&msgid="+id, nil)
-	return c.doRaw(req, "message read")
+	raw, err := c.doRaw(req, "message read")
+	if err != nil {
+		return nil, err
+	}
+	// fix-read-silent-suite-error-envelope: WeCom's /cgi-bin/message/get returns
+	// HTTP 200 + {"errcode":<n>,"errmsg":"..."} on error (invalid msgid / no
+	// permission). doRaw's status check passes, so without this guard the error
+	// envelope is returned as the message body. messageSend() (client.go:153)
+	// already guards `r.ErrCode != 0`; the read path now does too. The raw
+	// envelope is still returned on success so the agent-readable contract the
+	// existing TestRead_MessageRead pins is unchanged.
+	var r struct {
+		ErrCode int    `json:"errcode"`
+		ErrMsg  string `json:"errmsg"`
+	}
+	_ = json.Unmarshal(raw, &r)
+	if r.ErrCode != 0 {
+		return nil, fmt.Errorf("wework: message read errcode=%d msg=%s", r.ErrCode, r.ErrMsg)
+	}
+	return raw, nil
 }
 
 func (c *Client) cachedToken(ctx context.Context) (string, error) {

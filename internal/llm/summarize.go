@@ -17,6 +17,14 @@ import (
 const (
 	GLMBaseURL      = "https://open.bigmodel.cn/api/paas/v4"
 	DeepSeekBaseURL = "https://api.deepseek.com"
+
+	// GLMDefaultModel is the default model when SUITER_LLM_MODEL is unset and
+	// the resolved base URL is GLMBaseURL (provider-based defaulting in
+	// newLLMClientFromConfig). Matches the plan's model_target zhipu/glm-4.6.
+	GLMDefaultModel = "glm-4.6"
+	// DeepSeekDefaultModel is the default model when SUITER_LLM_MODEL is unset
+	// and the resolved base URL is DeepSeekBaseURL. Matches deepseek/deepseek-chat.
+	DeepSeekDefaultModel = "deepseek-chat"
 )
 
 // Client is an OpenAI-compatible chat client.
@@ -37,6 +45,11 @@ func NewClient(baseURL, apiKey, model string) *Client {
 		http:    &http.Client{Timeout: 60 * time.Second},
 	}
 }
+
+// Model returns the resolved model identifier. Used by the CLI layer's tests to
+// assert provider-based model defaulting (feat-llm-default-model-by-provider)
+// without making a live HTTP call.
+func (c *Client) Model() string { return c.model }
 
 // Summarize returns a one-paragraph summary of content via chat completions.
 func (c *Client) Summarize(ctx context.Context, content string) (string, error) {

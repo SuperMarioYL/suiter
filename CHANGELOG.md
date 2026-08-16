@@ -6,6 +6,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 for its shipped Go binary.
 
+## [v0.5.0] — 2026-08-16
+
+Two features and one defect-class fix folded from the v0.5.0 amendment. The m3
+agent-loop star-moment now works with only an API key set, the Read paths stop
+returning HTTP-200 error envelopes as bodies, and the login→use→logout token
+lifecycle is complete.
+
+### Added
+
+- **feat-llm-default-model-by-provider** — `newLLMClientFromConfig` now defaults
+  the model from the resolved base URL when `SUITER_LLM_MODEL` is unset
+  (GLM→`glm-4.6`, DeepSeek→`deepseek-chat`), so `suiter agent run
+  summarize-and-schedule` works with only `SUITER_LLM_API_KEY` set (the minimal
+  setup the README advertises; previously `model:""` was sent and the m3
+  star-moment failed opaquely at the LLM layer). An explicit `SUITER_LLM_MODEL`
+  always wins; defaulting by provider (not a single global default) avoids
+  sending `glm-4.6` to DeepSeek. Regression test
+  `TestNewLLMClientFromConfig_DefaultModelByProvider`.
+- **feat-logout-command** — new `suiter logout <suite>` clears a suite's cached
+  token from `~/.suiter/tokens.json`, wiring the previously-dead
+  `TokenStore.Delete` (zero non-test callers) and completing the
+  login→use→logout lifecycle the v0.2.0–v0.4.0 cached-token-expiry fixes assume
+  (they tell the user to re-login but offered no CLI way to clear a
+  stale/empty/leaked token). Mirrors `suiter login`: same `reg.Get(name)`
+  "unknown suite" guard, same `store==nil`-at-use guard; idempotent on a missing
+  entry (exit 0). Regression test `TestLogout`.
+
+### Fixed
+
+- **fix-read-silent-suite-error-envelope** — two Read paths returned the raw
+  HTTP-200 body without inspecting the suite's HTTP-200-nested error code, so an
+  API-level error was returned as if it were the resource body (a silent
+  failure on the m1/m3 star-moment path — the agent loop would feed the error
+  JSON to the GLM summarizer).
+  - `feishu.readDocRawContent` now parses Feishu's `{"code":...,"msg":...}`
+    envelope and errors on `code != 0` (mirrors `exchange()`'s `tr.Code != 0`
+    guard in the same file). The raw envelope is still returned on success so
+    the `--json` agent-readable contract is unchanged.
+  - `wework.messageRead` now parses WeCom's `{"errcode":...,"errmsg":...}`
+    envelope and errors on `errcode != 0` (mirrors `messageSend()`'s
+    `r.ErrCode != 0` guard in the same file). The raw envelope is still returned
+    on success, matching the existing `TestRead_MessageRead` success contract.
+  - dingtalk (HTTP-status-coded REST API) and tencentdocs (standard OAuth2) are
+    unaffected; the fix is scoped to the two suites with a concrete code-at-200
+    gap. Regression tests `TestRead_DocRawContent_ErrorEnvelope` and
+    `TestRead_MessageRead_ErrorEnvelope`.
+
 ## [v0.4.0] — 2026-08-13
 
 Two regression-class fixes folded from the v0.4.0 plan. No new features; the

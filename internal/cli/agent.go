@@ -57,12 +57,42 @@ func newAgentCommand(reg *suite.Registry) *cobra.Command {
 // viper env (SUITER_LLM_BASE_URL / SUITER_LLM_API_KEY / SUITER_LLM_MODEL),
 // defaulting to GLM-4.6. Returns nil if no API key is set; the loop errors
 // clearly in that case rather than failing at the HTTP layer.
+//
+// feat-llm-default-model-by-provider: when SUITER_LLM_MODEL is unset, default
+// the model from the resolved base URL (GLMBaseURL → glm-4.6, DeepSeekBaseURL
+// → deepseek-chat) so `suiter agent run` works with only SUITER_LLM_API_KEY set
+// (the minimal setup the README advertises; previously model:"" was sent and
+// the m3 star-moment failed opaquely at the LLM layer). An explicit
+// SUITER_LLM_MODEL always wins. Defaulting by provider — not a single global
+// default — avoids sending glm-4.6 to DeepSeek, which would regress the
+// DeepSeek path. A custom base URL with no model still errors clearly at the
+// HTTP layer (defaultLLMModel returns "" for unknown providers).
 func newLLMClientFromConfig() *llm.Client {
 	baseURL := viper.GetString("llm_base_url")
 	if baseURL == "" {
 		baseURL = llm.GLMBaseURL
 	}
-	return llm.NewClient(baseURL, viper.GetString("llm_api_key"), viper.GetString("llm_model"))
+	model := viper.GetString("llm_model")
+	if model == "" {
+		model = defaultLLMModel(baseURL)
+	}
+	return llm.NewClient(baseURL, viper.GetString("llm_api_key"), model)
+}
+
+// defaultLLMModel picks the provider's canonical model when SUITER_LLM_MODEL
+// is unset, keying off the RESOLVED base URL so a user who sets only
+// SUITER_LLM_API_KEY gets a working model per provider. Returns "" for an
+// unknown provider so a custom base URL with no model surfaces the error at the
+// HTTP layer (unchanged behavior, not a silent wrong-model send).
+func defaultLLMModel(baseURL string) string {
+	switch baseURL {
+	case llm.GLMBaseURL:
+		return llm.GLMDefaultModel
+	case llm.DeepSeekBaseURL:
+		return llm.DeepSeekDefaultModel
+	default:
+		return ""
+	}
 }
 
 // summarizeAndSchedule is the end-to-end m3 star-moment loop, extracted so it

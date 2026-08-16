@@ -141,6 +141,7 @@ suiter login dingtalk     # same flow, same shared TokenStore (m2 unified)
 suiter feishu doc read <id> --json          # agent-readable doc body
 suiter agent run summarize-and-schedule <feishu-doc-id>   # read 飞书 → GLM summarize → 钉钉 calendar event (m3 star-moment)
 suiter dingtalk calendar list --json        # unified verb, same grammar, no per-suite CLI glue
+suiter logout wework      # 清除缓存的 token（换号 / 撤销）— 幂等，没缓存也不报错
 ```
 
 <h2><img src="https://api.iconify.design/tabler:adjustments.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> 配置</h2>
@@ -160,7 +161,7 @@ suiter dingtalk calendar list --json        # unified verb, same grammar, no per
 | `tencentdocs_client_secret` | `SUITER_TENCENTDOCS_CLIENT_SECRET` | `""` | 腾讯文档 clientSecret（v0.3 已通） |
 | `llm_base_url` | `SUITER_LLM_BASE_URL` | GLM `open.bigmodel.cn` | OpenAI-compatible 模型根（GLM/DeepSeek） |
 | `llm_api_key` | `SUITER_LLM_API_KEY` | `""` | GLM/DeepSeek API key（`agent run` 摘要步骤必需） |
-| `llm_model` | `SUITER_LLM_MODEL` | `""` | 模型名（如 `glm-4.6` / `deepseek-chat`） |
+| `llm_model` | `SUITER_LLM_MODEL` | 按 base_url 默认（GLM→`glm-4.6` / DeepSeek→`deepseek-chat`） | 模型名；不设则按 provider 默认，显式设置永远生效 |
 
 token 缓存在 `~/.suiter/tokens.json`（0600 权限，单 dev 本机；多用户 / 云 vault 明确 out of scope）。
 

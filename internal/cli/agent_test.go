@@ -9,6 +9,9 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/spf13/viper"
+
+	"github.com/SuperMarioYL/suiter/internal/llm"
 	"github.com/SuperMarioYL/suiter/internal/suite"
 )
 
@@ -207,5 +210,44 @@ func TestTruncate_RuneSafe(t *testing.T) {
 	// ASCII path must behave identically to the old byte-based implementation.
 	if got := truncate("hello world", 5); got != "hello…" {
 		t.Fatalf("truncate(hello world,5) = %q, want hello…", got)
+	}
+}
+
+// TestNewLLMClientFromConfig_DefaultModelByProvider (feat-llm-default-model-by-provider)
+// proves newLLMClientFromConfig defaults the model from the RESOLVED base URL
+// when SUITER_LLM_MODEL is unset — GLMBaseURL → glm-4.6, DeepSeekBaseURL →
+// deepseek-chat — so `suiter agent run summarize-and-schedule` works with only
+// SUITER_LLM_API_KEY set (the minimal setup the README advertises; the m3
+// star-moment used to fail opaquely at the LLM layer sending model:""). The
+// function's own doc comment claims "defaulting to GLM-4.6" yet before this it
+// passed viper.GetString("llm_model") (== "" when unset) through verbatim. An
+// explicit SUITER_LLM_MODEL always wins. Defaulting BY provider (not a single
+// global default) avoids sending glm-4.6 to DeepSeek, which would regress the
+// DeepSeek path.
+func TestNewLLMClientFromConfig_DefaultModelByProvider(t *testing.T) {
+	t.Cleanup(viper.Reset)
+	cases := []struct {
+		name       string
+		baseURLEnv string // value for SUITER_LLM_BASE_URL ("" => default to GLM)
+		modelEnv   string // value for SUITER_LLM_MODEL ("" => default by provider)
+		want       string
+	}{
+		{"glm_default", "", "", llm.GLMDefaultModel},
+		{"deepseek_default", llm.DeepSeekBaseURL, "", llm.DeepSeekDefaultModel},
+		{"explicit_model_wins", "", "my-model", "my-model"},
+		{"explicit_model_wins_over_deepseek", llm.DeepSeekBaseURL, "my-model", "my-model"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupViperForTest(t)
+			t.Setenv("SUITER_LLM_API_KEY", "test-key")
+			t.Setenv("SUITER_LLM_BASE_URL", tc.baseURLEnv)
+			t.Setenv("SUITER_LLM_MODEL", tc.modelEnv)
+
+			got := newLLMClientFromConfig().Model()
+			if got != tc.want {
+				t.Fatalf("model = %q, want %q (provider-based model defaulting broken)", got, tc.want)
+			}
+		})
 	}
 }

@@ -77,6 +77,7 @@ func NewRoot() *cobra.Command {
 	reg := buildRegistry(store)
 
 	root.AddCommand(newLoginCommand(reg, store))
+	root.AddCommand(newLogoutCommand(reg, store))
 	root.AddCommand(newSuitesCommand(reg))
 	root.AddCommand(newFeishuCommand(reg))
 	root.AddCommand(newAgentCommand(reg))

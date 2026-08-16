@@ -362,6 +362,61 @@ func TestNewClient_Defaults(t *testing.T) {
 	}
 }
 
+// withTok wires a tokenGetter returning a fresh, non-expiring token so Read-path
+// tests reach readDocRawContent (cachedToken's expiry guard is exercised by
+// TestCachedToken_Expiry). Mirrors the wework test helper of the same name.
+func withTok(c *Client, tok suite.Token) *Client {
+	c.tokenGetter = func(context.Context) (suite.Token, error) { return tok, nil }
+	return c
+}
+
+// TestRead_DocRawContent_ErrorEnvelope (fix-read-silent-suite-error-envelope)
+// proves readDocRawContent inspects Feishu's HTTP-200-nested `code` envelope
+// instead of returning the error envelope as the doc body (a silent failure on
+// the m1/m3 star-moment path: the agent loop would feed the error JSON to the
+// GLM summarizer and write a semantically-wrong 钉钉 calendar event). The SAME
+// file's exchange() already guards `tr.Code != 0` (client.go:214) — the read
+// path did not. Success path stays back-compat: the raw envelope is returned so
+// the --json agent-readable contract is unchanged.
+func TestRead_DocRawContent_ErrorEnvelope(t *testing.T) {
+	cases := []struct {
+		name    string
+		resp    string
+		wantErr string // "" => want success
+		want    string // substring of body on success
+	}{
+		{"error_envelope", `{"code":1121,"msg":"doc not found"}`, "1121", ""},
+		{"success_envelope", `{"code":0,"msg":"ok","data":{"content":"hello"}}`, "", "hello"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.resp))
+			}))
+			t.Cleanup(srv.Close)
+			c := withTok(newTestClient(srv.URL), suite.Token{AccessToken: "u-at"})
+
+			body, err := c.Read(context.Background(), "doc", "doc-7")
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("Read: want err containing %q, got nil (body=%s) — the HTTP-200 error envelope was returned as the doc body (the bug)", tc.wantErr, string(body))
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("Read err = %q, want substring %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Read: want nil err on success, got %v", err)
+			}
+			if !strings.Contains(string(body), tc.want) {
+				t.Fatalf("Read body = %s, want substring %q (raw envelope contract)", string(body), tc.want)
+			}
+		})
+	}
+}
+
 // Ensure bytes is used (the JSON body fix) — keeps imports honest if the
 // above tests are trimmed later.
 var _ = bytes.NewReader

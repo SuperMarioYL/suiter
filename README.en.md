@@ -141,6 +141,7 @@ suiter login dingtalk     # same flow, same shared TokenStore (m2 unified)
 suiter feishu doc read <id> --json          # agent-readable doc body
 suiter agent run summarize-and-schedule <feishu-doc-id>   # read 飞书 → GLM summarize → 钉钉 calendar event (m3 star moment)
 suiter dingtalk calendar list --json        # unified verb, same grammar, no per-suite CLI glue
+suiter logout wework      # clear a cached token (switch accounts / revoke) — idempotent
 ```
 
 <h2><img src="https://api.iconify.design/tabler:adjustments.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> Config</h2>
@@ -160,7 +161,7 @@ Priority: `--config <path>` flag > env vars > `~/.suiter/config.yaml`.
 | `tencentdocs_client_secret` | `SUITER_TENCENTDOCS_CLIENT_SECRET` | `""` | 腾讯文档 clientSecret (live in v0.3) |
 | `llm_base_url` | `SUITER_LLM_BASE_URL` | GLM `open.bigmodel.cn` | OpenAI-compatible model root (GLM/DeepSeek) |
 | `llm_api_key` | `SUITER_LLM_API_KEY` | `""` | GLM/DeepSeek API key (required for the `agent run` summarize step) |
-| `llm_model` | `SUITER_LLM_MODEL` | `""` | model name (e.g. `glm-4.6` / `deepseek-chat`) |
+| `llm_model` | `SUITER_LLM_MODEL` | by base_url (GLM→`glm-4.6` / DeepSeek→`deepseek-chat`) | model name; defaults by provider when unset, an explicit value always wins |
 
 Tokens are cached at `~/.suiter/tokens.json` (0600 perms, single dev, local machine; multi-user / cloud vault explicitly out of scope for v0.1).
 

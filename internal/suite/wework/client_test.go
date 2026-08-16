@@ -219,6 +219,32 @@ func TestCachedToken_Expiry(t *testing.T) {
 	}
 }
 
+// TestRead_MessageRead_ErrorEnvelope (fix-read-silent-suite-error-envelope)
+// proves messageRead inspects WeCom's HTTP-200-nested `errcode` envelope instead
+// of returning the error envelope as the message body (an invalid msgid / no
+// permission error would be handed back as if it were the resource). The SAME
+// file's messageSend() already guards `r.ErrCode != 0` (client.go:153) — the
+// read path did not. The existing TestRead_MessageRead pins the errcode==0
+// success contract (raw envelope returned); this case pins the error contract.
+func TestRead_MessageRead_ErrorEnvelope(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/cgi-bin/message/get", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"errcode":40013,"errmsg":"invalid msgid"}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	c := withToken(newTestClient("https://example.invalid/token", srv.URL), suite.Token{AccessToken: "app-tok"})
+
+	_, err := c.Read(context.Background(), "message", "msg-7")
+	if err == nil {
+		t.Fatal("Read: want err containing '40013', got nil — the HTTP-200 error envelope was returned as the message body (the bug)")
+	}
+	if !strings.Contains(err.Error(), "40013") {
+		t.Fatalf("Read err = %q, want substring 40013", err.Error())
+	}
+}
+
 // TestNewClient_Defaults proves the public constructor keeps the contract.
 func TestNewClient_Defaults(t *testing.T) {
 	c := NewClient("c", "a", "s")
