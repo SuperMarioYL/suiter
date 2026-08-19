@@ -32,11 +32,11 @@ const defaultAPIBase = "https://docs.qq.com"
 
 // Client is the 腾讯文档 Suite implementation (m3).
 type Client struct {
-	clientID    string
+	clientID     string
 	clientSecret string
-	apiBase     string // https://docs.qq.com (overridable for tests)
-	oauth       *oauth2.Config
-	tokenGetter func(context.Context) (suite.Token, error)
+	apiBase      string // https://docs.qq.com (overridable for tests)
+	oauth        *oauth2.Config
+	tokenGetter  func(context.Context) (suite.Token, error)
 }
 
 // NewClient constructs a 腾讯文档 client. The OAuth2 config carries the
@@ -162,7 +162,7 @@ func (c *Client) exchange(ctx context.Context, code string) (suite.Token, error)
 	body, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.oauth.Endpoint.TokenURL, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := suite.HTTPClient().Do(req)
 	if err != nil {
 		return suite.Token{}, fmt.Errorf("tencentdocs: exchange: %w", err)
 	}
@@ -244,18 +244,38 @@ func (c *Client) sheetWrite(ctx context.Context, sheetID string, body []byte) (s
 	if err != nil {
 		return "", err
 	}
+	// fix-dingtalk-tencentdocs-write-fake-success: the v0.5.0 read-path fix
+	// guarded feishu/wework reads against HTTP-200 error envelopes, but the
+	// WRITE path was not touched — sheetWrite unmarshaled `range`/`id` and
+	// returned the hard-coded literal "written" when neither was present,
+	// masking HTTP-200 error envelopes (a real Tencent-Docs failure mode for
+	// permission/validation errors) and wrong-field successes. Mirror the
+	// read-path guard: surface the API error envelope (Tencent `code`/
+	// `errcode`/`ret` + `errmsg`/`message`) as an error; only return an id/
+	// range when the body actually carries one; otherwise surface the raw
+	// body so a wrong-field success is observable rather than silently
+	// returned as "written" (which made the agent loop exit 0, losing data).
 	var r struct {
-		Range string `json:"range"`
-		ID    string `json:"id"`
+		Range   string `json:"range"`
+		ID      string `json:"id"`
+		Code    int    `json:"code"`    // some Tencent envelopes use int code
+		ErrCode int    `json:"errcode"` // legacy envelope
+		Ret     int    `json:"ret"`     // QQ-family ret/errmsg
+		ErrMsg  string `json:"errmsg"`
+		Message string `json:"message"`
 	}
-	_ = json.Unmarshal(raw, &r) // best-effort: surface an id if the API returned one
+	_ = json.Unmarshal(raw, &r)
+	if r.Code != 0 || r.ErrCode != 0 || r.Ret != 0 {
+		return "", fmt.Errorf("tencentdocs: sheet write code=%d errcode=%d ret=%d msg=%s",
+			r.Code, r.ErrCode, r.Ret, firstNonEmpty(r.ErrMsg, r.Message))
+	}
 	if r.ID != "" {
 		return r.ID, nil
 	}
 	if r.Range != "" {
 		return r.Range, nil
 	}
-	return "written", nil
+	return "", fmt.Errorf("tencentdocs: sheet write: no id in response: %s", string(raw))
 }
 
 func (c *Client) cachedToken(ctx context.Context) (string, error) {
@@ -281,7 +301,7 @@ func (c *Client) cachedToken(ctx context.Context) (string, error) {
 // doRaw executes the request and returns the body, mapping non-200 to an
 // error that carries the kind verb for context.
 func (c *Client) doRaw(req *http.Request, verb string) ([]byte, error) {
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := suite.HTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("tencentdocs: %s: %w", verb, err)
 	}

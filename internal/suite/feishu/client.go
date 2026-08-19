@@ -183,7 +183,7 @@ func (c *Client) exchange(ctx context.Context, code string) (suite.Token, error)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+oidcTokenPath, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("Authorization", "Bearer "+appTok)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := suite.HTTPClient().Do(req)
 	if err != nil {
 		return suite.Token{}, fmt.Errorf("feishu: exchange: %w", err)
 	}
@@ -227,7 +227,7 @@ func (c *Client) appAccessToken(ctx context.Context) (string, error) {
 	body := fmt.Sprintf(`{"app_id":%q,"app_secret":%q}`, c.appID, c.appSecret)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+appTokenPath, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := suite.HTTPClient().Do(req)
 	if err != nil {
 		return "", fmt.Errorf("feishu: app_access_token: %w", err)
 	}
@@ -274,7 +274,7 @@ func (c *Client) readDocRawContent(ctx context.Context, accessToken, docID strin
 	path := fmt.Sprintf(docRawContent, url.PathEscape(docID))
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := suite.HTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("feishu: doc read: %w", err)
 	}

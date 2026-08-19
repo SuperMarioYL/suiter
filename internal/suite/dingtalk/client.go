@@ -161,7 +161,7 @@ func (c *Client) exchange(ctx context.Context, code string) (suite.Token, error)
 	body, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.oauth.Endpoint.TokenURL, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := suite.HTTPClient().Do(req)
 	if err != nil {
 		return suite.Token{}, fmt.Errorf("dingtalk: exchange: %w", err)
 	}
@@ -254,14 +254,36 @@ func (c *Client) calendarCreateEvent(ctx context.Context, calendarID string, bod
 	if err != nil {
 		return "", err
 	}
+	// fix-dingtalk-tencentdocs-write-fake-success: the v0.5.0 read-path fix
+	// guarded feishu/wework reads against HTTP-200 error envelopes, but the
+	// WRITE path was not touched — calendarCreateEvent unmarshaled only a
+	// top-level `id` and returned the hard-coded literal "created" when it was
+	// empty, masking HTTP-200 error envelopes (a real DingTalk failure mode
+	// for permission/validation errors) and wrong-field successes. Mirror the
+	// read-path guard: surface the API error envelope (DingTalk REST
+	// `code`/`message`, legacy `errcode`/`errmsg`) as an error; only return an
+	// id when the body actually carries one under `id`; otherwise surface the
+	// raw body so a wrong-field success (id under `eventId` etc.) is observable
+	// rather than silently returned as "created" (which made the agent loop
+	// print `scheduled: created` and exit 0, losing the m3 star-moment event).
 	var r struct {
-		ID string `json:"id"`
+		ID      string `json:"id"`
+		Code    string `json:"code"` // REST error envelope (non-empty on error)
+		Message string `json:"message"`
+		ErrCode int    `json:"errcode"` // legacy cgi-bin envelope
+		ErrMsg  string `json:"errmsg"`
 	}
-	_ = json.Unmarshal(raw, &r) // best-effort: surface id if the API returned one
+	_ = json.Unmarshal(raw, &r)
+	if r.Code != "" && r.Code != "0" {
+		return "", fmt.Errorf("dingtalk: calendar create code=%s msg=%s", r.Code, r.Message)
+	}
+	if r.ErrCode != 0 {
+		return "", fmt.Errorf("dingtalk: calendar create errcode=%d msg=%s", r.ErrCode, r.ErrMsg)
+	}
 	if r.ID != "" {
 		return r.ID, nil
 	}
-	return "created", nil
+	return "", fmt.Errorf("dingtalk: calendar create: no id in response: %s", string(raw))
 }
 
 func (c *Client) cachedToken(ctx context.Context) (string, error) {
@@ -290,7 +312,7 @@ func (c *Client) cachedToken(ctx context.Context) (string, error) {
 // doRaw executes the request and returns the body, mapping non-200 to an
 // error that carries the kind verb for context.
 func (c *Client) doRaw(req *http.Request, verb string) ([]byte, error) {
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := suite.HTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("dingtalk: %s: %w", verb, err)
 	}

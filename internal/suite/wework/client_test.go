@@ -3,6 +3,7 @@ package wework
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -259,5 +260,104 @@ func TestNewClient_Defaults(t *testing.T) {
 	}
 	if c.Name() != Name || c.Name() != "wework" {
 		t.Fatalf("Name = %q, want wework", c.Name())
+	}
+}
+
+// closedPortURL returns an http://127.0.0.1:PORT URL whose port is guaranteed
+// closed (nothing listening → connection refused) so the request fails at the
+// transport layer and http.Client.Do returns a *url.Error embedding the full
+// request URL (which carries the corpsecret/access_token for WeCom).
+func closedPortURL(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	return "http://" + addr
+}
+
+// TestLogin_TransportErrorDoesNotLeakSecret (fix-wework-secret-leaked-in-url-
+// error) proves a transport failure during gettoken does NOT leak the
+// long-lived corpsecret. WeCom gettoken requires corpid+corpsecret in the
+// query; before the fix the corpsecret was concatenated raw into the URL and
+// a transport error returned a *url.Error whose .Error() embedded the full
+// URL — propagating it verbatim leaked the corpsecret to stderr/logs.
+func TestLogin_TransportErrorDoesNotLeakSecret(t *testing.T) {
+	const secret = "topsecret-LEAK-SENTINEL-9f3a"
+	c := newTestClient(closedPortURL(t)+"/cgi-bin/gettoken", "https://example.invalid")
+	c.secret = secret
+	_, err := c.Login(context.Background())
+	if err == nil {
+		t.Fatal("Login: want transport error, got nil")
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Fatalf("Login error leaked the corpsecret to the message: %q", err.Error())
+	}
+	if strings.Contains(err.Error(), "corpsecret=") {
+		t.Fatalf("Login error leaked a corpsecret= query fragment: %q", err.Error())
+	}
+}
+
+// TestWrite_TransportErrorDoesNotLeakToken proves messageSend's transport error
+// does not leak the ~2h access_token (carried in the message/send query).
+func TestWrite_TransportErrorDoesNotLeakToken(t *testing.T) {
+	const tok = "app-tok-LEAK-SENTINEL-7c1b"
+	c := withToken(newTestClient("https://example.invalid/token", closedPortURL(t)), suite.Token{AccessToken: tok})
+	_, err := c.Write(context.Background(), "message", "", []byte(`{"touser":"@all"}`))
+	if err == nil {
+		t.Fatal("Write: want transport error, got nil")
+	}
+	if strings.Contains(err.Error(), tok) {
+		t.Fatalf("Write error leaked the access_token to the message: %q", err.Error())
+	}
+	if strings.Contains(err.Error(), "access_token=") {
+		t.Fatalf("Write error leaked an access_token= query fragment: %q", err.Error())
+	}
+}
+
+// TestRead_TransportErrorDoesNotLeakToken proves messageRead's transport error
+// does not leak the access_token (carried in the message/get query alongside
+// the user-supplied msgid).
+func TestRead_TransportErrorDoesNotLeakToken(t *testing.T) {
+	const tok = "app-tok-LEAK-SENTINEL-4e2d"
+	c := withToken(newTestClient("https://example.invalid/token", closedPortURL(t)), suite.Token{AccessToken: tok})
+	_, err := c.Read(context.Background(), "message", "msg-7")
+	if err == nil {
+		t.Fatal("Read: want transport error, got nil")
+	}
+	if strings.Contains(err.Error(), tok) {
+		t.Fatalf("Read error leaked the access_token to the message: %q", err.Error())
+	}
+	if strings.Contains(err.Error(), "access_token=") {
+		t.Fatalf("Read error leaked an access_token= query fragment: %q", err.Error())
+	}
+}
+
+// TestRead_MessageRead_EscapesSpecialQueryChars proves a msgid containing
+// query-reserved characters (#, &, +) reaches the WeCom API uncorrupted
+// (fix-wework-secret-leaked-in-url-error): url.Values.Encode escapes values,
+// so `#` no longer truncates the URL to a fragment and `&` no longer injects a
+// bogus param.
+func TestRead_MessageRead_EscapesSpecialQueryChars(t *testing.T) {
+	var gotMsgID string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/cgi-bin/message/get", func(w http.ResponseWriter, r *http.Request) {
+		gotMsgID = r.URL.Query().Get("msgid")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"errcode":0,"msg":{"content":"ok"}}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	c := withToken(newTestClient("https://example.invalid/token", srv.URL), suite.Token{AccessToken: "app-tok"})
+
+	// a msgid with #, & and + must round-trip verbatim
+	weird := "id#with&plus+chars"
+	if _, err := c.Read(context.Background(), "message", weird); err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if gotMsgID != weird {
+		t.Fatalf("msgid = %q, want %q (unescaped value corrupted the request)", gotMsgID, weird)
 	}
 }

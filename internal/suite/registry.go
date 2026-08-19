@@ -3,7 +3,11 @@
 // resolves a suite by name. One interface, one grammar: suiter <suite> <verb>.
 package suite
 
-import "context"
+import (
+	"context"
+	"net/http"
+	"time"
+)
 
 // Token is the per-suite cached credential returned by Login.
 type Token struct {
@@ -59,3 +63,24 @@ func (r *Registry) Get(name string) (Suite, bool) {
 func (r *Registry) Names() []string {
 	return append([]string(nil), r.order...)
 }
+
+// suiteHTTPTimeout is the deadline every suite API call gets. Mirrors the LLM
+// client's 60s timeout (internal/llm/summarize.go) but tighter — suite reads
+// are small JSON bodies, not model inference. fix-suite-http-client-no-timeout:
+// the four suite clients previously issued requests via http.DefaultClient,
+// whose Timeout is 0 (no deadline), so a black-holed TCP connection or a hung
+// endpoint blocked the goroutine indefinitely with no cancellation — a stalled
+// Feishu doc read could wedge the whole `suiter agent run summarize-and-schedule`
+// star-moment with no way out but kill -9.
+const suiteHTTPTimeout = 30 * time.Second
+
+// sharedHTTPClient is the single *http.Client every suite reuses. http.Client
+// is safe for concurrent use, and reusing one keeps the default Transport's
+// connection pool instead of opening a fresh transport per call.
+var sharedHTTPClient = &http.Client{Timeout: suiteHTTPTimeout}
+
+// HTTPClient returns a *http.Client with a non-zero Timeout for suite API
+// calls (fix-suite-http-client-no-timeout). All four suite clients call this
+// in place of http.DefaultClient so a stalled endpoint fails within ~30s
+// instead of hanging the CLI forever.
+func HTTPClient() *http.Client { return sharedHTTPClient }

@@ -173,6 +173,69 @@ func TestWrite_Sheet(t *testing.T) {
 	}
 }
 
+// sheetWriteMux serves a fixed write response body so the write-path
+// error-envelope / fake-success tests can drive sheetWrite directly.
+func sheetWriteMux(t *testing.T, writeBody string) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/spreadsheets/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(writeBody))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestWrite_Sheet_ErrorEnvelope (fix-dingtalk-tencentdocs-write-fake-success)
+// proves sheetWrite surfaces a Tencent-Docs HTTP-200 error envelope instead of
+// masking it with the hard-coded "written" id. Before the fix, a 200-body
+// lacking `id`/`range` made Write return "written" and the agent loop exited 0,
+// silently losing the written cells.
+func TestWrite_Sheet_ErrorEnvelope(t *testing.T) {
+	srv := sheetWriteMux(t, `{"code":1,"errmsg":"no permission to write"}`)
+	c := withToken(newTestClient("https://example.invalid/token", srv.URL), suite.Token{AccessToken: "u-at"})
+
+	id, err := c.Write(context.Background(), "sheet", "sh-1", []byte(`{"range":"A1"}`))
+	if err == nil {
+		t.Fatalf("Write: want error on HTTP-200 error envelope, got id=%q (the fake \"written\" id — the bug)", id)
+	}
+	if !strings.Contains(err.Error(), "no permission") {
+		t.Fatalf("Write err = %q, want the API errmsg", err.Error())
+	}
+}
+
+// TestWrite_Sheet_NoFakeIDOnWrongField proves a 200 success whose id lives
+// under a non-`id`/`range` field surfaces the raw body instead of "written"
+// (fix-dingtalk-tencentdocs-write-fake-success).
+func TestWrite_Sheet_NoFakeIDOnWrongField(t *testing.T) {
+	srv := sheetWriteMux(t, `{"updatedRange":"A1:B2","updatedCells":4}`)
+	c := withToken(newTestClient("https://example.invalid/token", srv.URL), suite.Token{AccessToken: "u-at"})
+
+	id, err := c.Write(context.Background(), "sheet", "sh-1", []byte(`{"range":"A1"}`))
+	if err == nil {
+		t.Fatalf("Write: want error surfacing the renamed-field body, got id=%q (the fake \"written\" id — the bug)", id)
+	}
+	if !strings.Contains(err.Error(), "updatedRange") {
+		t.Fatalf("Write err = %q, want the raw body (with updatedRange) surfaced so the field mismatch is observable", err.Error())
+	}
+}
+
+// TestWrite_Sheet_RealIDStillReturned proves a genuine success carrying `id`
+// still returns it (the fix did not break the happy path).
+func TestWrite_Sheet_RealIDStillReturned(t *testing.T) {
+	srv := sheetWriteMux(t, `{"id":"rng-42","range":"A1:B2"}`)
+	c := withToken(newTestClient("https://example.invalid/token", srv.URL), suite.Token{AccessToken: "u-at"})
+
+	id, err := c.Write(context.Background(), "sheet", "sh-1", []byte(`{"range":"A1"}`))
+	if err != nil {
+		t.Fatalf("Write: %v (genuine success with id must not error)", err)
+	}
+	if id != "rng-42" {
+		t.Fatalf("write id = %q, want rng-42", id)
+	}
+}
+
 // TestRead_RequiresID proves an empty sheet id errors before the call.
 func TestRead_RequiresID(t *testing.T) {
 	c := withToken(&Client{}, suite.Token{AccessToken: "at"})

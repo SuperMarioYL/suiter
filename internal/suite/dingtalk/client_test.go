@@ -195,6 +195,67 @@ func TestWrite_CalendarCreate(t *testing.T) {
 	}
 }
 
+// calendarCreateMux serves a fixed create response body so the write-path
+// error-envelope / fake-success tests can drive calendarCreateEvent directly.
+func calendarCreateMux(t *testing.T, createBody string) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1.0/calendar/calendars/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(createBody))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestWrite_CalendarCreate_ErrorEnvelope (fix-dingtalk-tencentdocs-write-fake-
+// success) proves calendarCreateEvent surfaces a DingTalk HTTP-200 error
+// envelope instead of masking it with the hard-coded "created" id. Before the
+// fix, a 200-body lacking `id` made Write return "created" and the agent loop
+// printed `scheduled: created` and exited 0, silently losing the calendar
+// event the m3 star-moment claims to create.
+func TestWrite_CalendarCreate_ErrorEnvelope(t *testing.T) {
+	srv := calendarCreateMux(t, `{"code":"Forbidden","message":"no permission to create event"}`)
+	c := withToken(newTestClient("https://example.invalid/token", srv.URL), suite.Token{AccessToken: "u-at"})
+
+	id, err := c.Write(context.Background(), "calendar", "primary", []byte(`{"summary":"x"}`))
+	if err == nil {
+		t.Fatalf("Write: want error on HTTP-200 error envelope, got id=%q (the fake \"created\" id — the bug)", id)
+	}
+	if !strings.Contains(err.Error(), "Forbidden") && !strings.Contains(err.Error(), "no permission") {
+		t.Fatalf("Write err = %q, want the API code/message", err.Error())
+	}
+}
+
+// TestWrite_CalendarCreate_NoFakeIDOnWrongField proves a 200 success whose id
+// lives under a non-`id` field (e.g. eventId) surfaces the raw body
+// (observable) instead of a hard-coded "created" (fix-dingtalk-tencentdocs-
+// write-fake-success).
+func TestWrite_CalendarCreate_NoFakeIDOnWrongField(t *testing.T) {
+	srv := calendarCreateMux(t, `{"eventId":"evt-real-but-renamed"}`)
+	c := withToken(newTestClient("https://example.invalid/token", srv.URL), suite.Token{AccessToken: "u-at"})
+
+	id, err := c.Write(context.Background(), "calendar", "primary", []byte(`{"summary":"x"}`))
+	if err == nil {
+		t.Fatalf("Write: want error surfacing the renamed-field body, got id=%q (the fake \"created\" id — the bug)", id)
+	}
+	if !strings.Contains(err.Error(), "eventId") {
+		t.Fatalf("Write err = %q, want the raw body (with eventId) surfaced so the field mismatch is observable", err.Error())
+	}
+}
+
+// TestWrite_CalendarCreate_LegacyErrcodeEnvelope proves a legacy cgi-bin-style
+// errcode/errmsg 200-body is also surfaced (not masked by "created").
+func TestWrite_CalendarCreate_LegacyErrcodeEnvelope(t *testing.T) {
+	srv := calendarCreateMux(t, `{"errcode":40014,"errmsg":"invalid token"}`)
+	c := withToken(newTestClient("https://example.invalid/token", srv.URL), suite.Token{AccessToken: "u-at"})
+
+	if _, err := c.Write(context.Background(), "calendar", "primary", []byte(`{"summary":"x"}`)); err == nil || !strings.Contains(err.Error(), "40014") {
+		t.Fatalf("Write err = %v, want errcode 40014", err)
+	}
+}
+
 // TestCachedToken_Guards proves the cached-token guards mirror feishu's.
 func TestCachedToken_Guards(t *testing.T) {
 	c := &Client{} // no getter

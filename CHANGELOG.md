@@ -6,6 +6,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 for its shipped Go binary.
 
+## [v0.6.0] — 2026-08-19
+
+Four regression-class fixes folded from the v0.6.0 amendment (a code-verified
+bug-hunt; 0 raw/prose patches). No new features; the m3 agent-loop
+star-moment and the v0.5.0 read-path error-envelope guards stand unchanged.
+
+### Fixed
+
+- **fix-wework-secret-leaked-in-url-error** — WeCom `gettoken` requires
+  `corpid`+`corpsecret` in the query and the message APIs require
+  `access_token` in the query; the code built those URLs by raw string
+  concatenation, so on any transport-level failure Go's `*url.Error` (whose
+  `.Error()` embeds the full request URL) leaked the long-lived corpsecret
+  (or the ~2h access_token) to stderr/logs, and unescaped values (`+`, `#`,
+  `&`) corrupted requests. Fix: build every wework URL with
+  `url.Values{}.Set(...).Encode()` (proper escaping) and unwrap `*url.Error`
+  → `ue.Err` in `doRaw`/`Login` before wrapping so the secret-bearing URL
+  never reaches the formatted error. Regression tests assert a transport
+  error on gettoken/message-send/message-read contains neither the secret nor
+  `corpsecret=`/`access_token=`, and that a msgid with `#`/`&`/`+` reaches
+  WeCom uncorrupted. (`internal/suite/wework/client.go`)
+- **fix-suite-http-client-no-timeout** — all four suite clients plus
+  feishu `appAccessToken`/`exchange` issued requests via `http.DefaultClient`
+  (9 call sites, `Timeout==0` → no deadline), so a black-holed TCP connection
+  or hung endpoint blocked the goroutine indefinitely with no cancellation — a
+  stalled Feishu doc read could wedge the whole `suiter agent run
+  summarize-and-schedule` star-moment with no way out but `kill -9`. The LLM
+  client already did the right thing (`internal/llm/summarize.go` uses a 60s
+  timeout). Fix: add a shared `suite.HTTPClient()` (30s timeout) and replace
+  the 9 `http.DefaultClient.Do` call sites with it. Regression test
+  `TestHTTPClient_NonZeroTimeout`. (`internal/suite/registry.go` + the four
+  suite clients)
+- **fix-config-store-concurrent-write-race** — `Store.Save`/`Delete` did a
+  non-atomic load-modify-flush with no lock: the tmp+rename was atomic for the
+  final file, but the load-to-mutate-to-flush window was unguarded, so two
+  concurrent `suiter login` processes (or goroutines) both loaded the same
+  initial map, each added only its own key, and the second rename silently
+  erased the first suite's just-cached token (last rename wins). Fix:
+  serialize the critical section with an in-process `sync.Mutex` AND an
+  exclusive flock on a sibling `.lock` file (cross-process), held across
+  load-modify-flush + the existing tmp+atomic-rename. Regression test
+  `TestSave_ConcurrentNoLoss` runs N concurrent Saves and asserts none are
+  lost (`go test -race`). (`internal/config/store.go`)
+- **fix-dingtalk-tencentdocs-write-fake-success** — the v0.5.0 read-path fix
+  guarded feishu/wework reads against HTTP-200 error envelopes, but the WRITE
+  paths were not touched. `dingtalk.calendarCreateEvent` returned the
+  hard-coded literal `created` when the 200-body lacked an `id`, and
+  `tencentdocs.sheetWrite` returned `written`; both masked HTTP-200 error
+  envelopes (a real DingTalk/Tencent-Docs failure mode for
+  permission/validation errors) and wrong-field successes, so the agent loop
+  printed `scheduled: created` and exited 0, silently losing the m3
+  star-moment event. Fix: mirror the read-path guard — surface the API error
+  envelope (DingTalk `code`/`message` + legacy `errcode`/`errmsg`; Tencent
+  `code`/`errcode`/`ret` + `errmsg`/`message`) as an error; only return an id
+  when the body actually carries one; otherwise surface the raw body so a
+  wrong-field success is observable rather than masked. Regression tests
+  assert a 200 error envelope → write error (not a fake id) and a real id →
+  returned id. (`internal/suite/dingtalk/client.go`,
+  `internal/suite/tencentdocs/client.go`)
+
 ## [v0.5.0] — 2026-08-16
 
 Two features and one defect-class fix folded from the v0.5.0 amendment. The m3

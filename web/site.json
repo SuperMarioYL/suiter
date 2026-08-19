@@ -1,9 +1,16 @@
 {
   "schema": 1,
-  "content_version": "v0.5.0",
+  "content_version": "v0.6.0",
   "name": "suiter",
   "github": "https://github.com/SuperMarioYL/suiter",
   "host": "suiter.lei6393.com",
+  "changelog": [
+    {
+      "version": "v0.6.0",
+      "en": "WeCom corpsecret no longer leaks via URL errors; suite HTTP calls now time out instead of hanging; config writes are concurrency-safe; dingtalk/tencentdocs writes no longer fake success on error envelopes.",
+      "zh": "企微 corpsecret 不再通过 URL 错误泄露；套件 HTTP 调用现在会超时而非挂起；配置写入并发安全；钉钉/腾讯文档写入不再在错误信封上伪造成功。"
+    }
+  ],
   "lang": {
     "primary": "zh",
     "toggle": true

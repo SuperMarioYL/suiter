@@ -10,9 +10,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -75,11 +77,23 @@ func (c *Client) Login(ctx context.Context) (suite.Token, error) {
 	if c.corpID == "" || c.secret == "" {
 		return suite.Token{}, fmt.Errorf("wework: credentials not set (export SUITER_WEWORK_CORP_ID and SUITER_WEWORK_SECRET)")
 	}
+	// fix-wework-secret-leaked-in-url-error: WeCom gettoken requires corpid +
+	// corpsecret in the query. Building the URL by raw string concatenation
+	// left the long-lived corpsecret verbatim in the request URL, and on any
+	// transport failure Go's http.Client.Do returns a *url.Error whose .Error()
+	// embeds the full URL — propagating that verbatim leaked the corpsecret to
+	// stderr/logs. Build the query with url.Values.Encode (proper escaping, so
+	// a corpsecret/msgid containing +, # or & no longer corrupts the request)
+	// and unwrap *url.Error before wrapping so the secret never reaches the
+	// formatted error.
+	q := url.Values{}
+	q.Set("corpid", c.corpID)
+	q.Set("corpsecret", c.secret)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
-		c.oauth.Endpoint.TokenURL+"?corpid="+c.corpID+"&corpsecret="+c.secret, nil)
-	resp, err := http.DefaultClient.Do(req)
+		c.oauth.Endpoint.TokenURL+"?"+q.Encode(), nil)
+	resp, err := suite.HTTPClient().Do(req)
 	if err != nil {
-		return suite.Token{}, fmt.Errorf("wework: gettoken: %w", err)
+		return suite.Token{}, fmt.Errorf("wework: gettoken: %w", redactURLError(err))
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
@@ -137,8 +151,12 @@ func (c *Client) messageSend(ctx context.Context, body []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// fix-wework-secret-leaked-in-url-error: escape access_token via
+	// url.Values so a token containing +, # or & does not corrupt the request.
+	q := url.Values{}
+	q.Set("access_token", tok)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.apiBase+"/cgi-bin/message/send?access_token="+tok, bytes.NewReader(body))
+		c.apiBase+"/cgi-bin/message/send?"+q.Encode(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	raw, err := c.doRaw(req, "message send")
 	if err != nil {
@@ -167,8 +185,14 @@ func (c *Client) messageRead(ctx context.Context, id string) ([]byte, error) {
 	if id == "" {
 		return nil, fmt.Errorf("wework: message read requires a message id")
 	}
+	// fix-wework-secret-leaked-in-url-error: escape access_token + the
+	// user-supplied msgid via url.Values so a value containing +, # or & (a
+	// msgid is CLI input — trivially triggerable) does not corrupt the URL.
+	q := url.Values{}
+	q.Set("access_token", tok)
+	q.Set("msgid", id)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
-		c.apiBase+"/cgi-bin/message/get?access_token="+tok+"&msgid="+id, nil)
+		c.apiBase+"/cgi-bin/message/get?"+q.Encode(), nil)
 	raw, err := c.doRaw(req, "message read")
 	if err != nil {
 		return nil, err
@@ -214,12 +238,36 @@ func (c *Client) cachedToken(ctx context.Context) (string, error) {
 	return tok.AccessToken, nil
 }
 
+// redactURLError unwraps a *url.Error so the request URL — which for WeCom
+// carries the long-lived corpsecret (gettoken) or the ~2h access_token
+// (message send/read) in the query — is NOT embedded in the returned error
+// message. http.Client.Do returns *url.Error whose .Error() is
+// `Get "https://qyapi.weixin.qq.com/...?corpsecret=SECRET": <cause>`, so
+// propagating it verbatim leaked the secret to stderr/logs on transport
+// failures (fix-wework-secret-leaked-in-url-error). Unwrapping to ue.Err
+// keeps the transport cause (e.g. "connection refused") without the URL.
+func redactURLError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return ue.Err
+	}
+	return err
+}
+
 // doRaw executes the request and returns the body, mapping non-200 to an
 // error that carries the verb for context.
 func (c *Client) doRaw(req *http.Request, verb string) ([]byte, error) {
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := suite.HTTPClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("wework: %s: %w", verb, err)
+		// fix-wework-secret-leaked-in-url-error: doRaw serves messageSend +
+		// messageRead, whose URLs carry the access_token in the query. Unwrap
+		// *url.Error so the access_token-bearing URL is not embedded in the
+		// returned error (propagated verbatim it would leak the ~2h token to
+		// stderr/logs on a transport failure).
+		return nil, fmt.Errorf("wework: %s: %w", verb, redactURLError(err))
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
