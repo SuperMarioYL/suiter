@@ -170,6 +170,67 @@ func TestRead_CalendarGet(t *testing.T) {
 	}
 }
 
+// calendarReadMux serves a fixed read response body (any path/method) so the
+// read-path error-envelope tests can drive calendarList/calendarGet directly.
+func calendarReadMux(t *testing.T, readBody string) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(readBody))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestRead_CalendarList_ErrorEnvelope (fix-dingtalk-tencentdocs-read-error-
+// envelope) proves calendarList surfaces a DingTalk HTTP-200 error envelope
+// instead of returning it as the calendar list. Before the fix, doRaw's 200
+// check passed and the error JSON was handed to the agent/user as if it were
+// the calendar list — the same silent-failure class fixed for the write path
+// (calendarCreateEvent) in v0.6.0.
+func TestRead_CalendarList_ErrorEnvelope(t *testing.T) {
+	srv := calendarReadMux(t, `{"code":"Forbidden","message":"no permission to list calendars"}`)
+	c := withToken(newTestClient("https://example.invalid/token", srv.URL), suite.Token{AccessToken: "u-at"})
+
+	body, err := c.Read(context.Background(), "calendar", "")
+	if err == nil {
+		t.Fatalf("Read: want error on HTTP-200 error envelope, got body=%s (the error JSON returned as the calendar list — the bug)", string(body))
+	}
+	if !strings.Contains(err.Error(), "Forbidden") && !strings.Contains(err.Error(), "no permission") {
+		t.Fatalf("Read err = %q, want the API code/message", err.Error())
+	}
+}
+
+// TestRead_CalendarGet_LegacyErrcodeEnvelope (fix-dingtalk-tencentdocs-read-
+// error-envelope) proves a legacy cgi-bin-style errcode/errmsg 200-body on
+// calendar get is surfaced, not returned as the calendar.
+func TestRead_CalendarGet_LegacyErrcodeEnvelope(t *testing.T) {
+	srv := calendarReadMux(t, `{"errcode":40014,"errmsg":"invalid token"}`)
+	c := withToken(newTestClient("https://example.invalid/token", srv.URL), suite.Token{AccessToken: "u-at"})
+
+	if _, err := c.Read(context.Background(), "calendar", "cal-42"); err == nil || !strings.Contains(err.Error(), "40014") {
+		t.Fatalf("Read err = %v, want errcode 40014", err)
+	}
+}
+
+// TestRead_CalendarList_SuccessUnchanged proves the guard is behavior-preserving
+// for a real 200 success carrying no envelope fields (the calendar list is
+// returned verbatim, not rejected as a parse/envelope error).
+func TestRead_CalendarList_SuccessUnchanged(t *testing.T) {
+	srv := calendarReadMux(t, `{"calendars":[{"id":"cal-1"}]}`)
+	c := withToken(newTestClient("https://example.invalid/token", srv.URL), suite.Token{AccessToken: "u-at"})
+
+	body, err := c.Read(context.Background(), "calendar", "")
+	if err != nil {
+		t.Fatalf("Read: want nil err on plain success, got %v", err)
+	}
+	if !strings.Contains(string(body), "cal-1") {
+		t.Fatalf("body = %s, want calendars list", string(body))
+	}
+}
+
 // TestWrite_CalendarCreate proves Write("calendar", ...) routes to POST
 // .../calendars/primary/events with the JSON body and returns the new event id.
 func TestWrite_CalendarCreate(t *testing.T) {

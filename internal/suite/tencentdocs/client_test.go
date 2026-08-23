@@ -236,6 +236,54 @@ func TestWrite_Sheet_RealIDStillReturned(t *testing.T) {
 	}
 }
 
+// sheetReadMux serves a fixed read response body (any path/method) so the
+// read-path error-envelope test can drive sheetRead directly.
+func sheetReadMux(t *testing.T, readBody string) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(readBody))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestRead_Sheet_ErrorEnvelope (fix-dingtalk-tencentdocs-read-error-envelope)
+// proves sheetRead surfaces a Tencent-Docs HTTP-200 error envelope instead of
+// returning it as the sheet content. Before the fix, doRaw's 200 check passed
+// and the error JSON was handed to the agent/user as if it were the sheet —
+// the same silent-failure class fixed for the write path (sheetWrite) in v0.6.0.
+func TestRead_Sheet_ErrorEnvelope(t *testing.T) {
+	srv := sheetReadMux(t, `{"code":1,"errmsg":"no permission to read sheet"}`)
+	c := withToken(newTestClient("https://example.invalid/token", srv.URL), suite.Token{AccessToken: "u-at"})
+
+	body, err := c.Read(context.Background(), "sheet", "sh-1")
+	if err == nil {
+		t.Fatalf("Read: want error on HTTP-200 error envelope, got body=%s (the error JSON returned as the sheet — the bug)", string(body))
+	}
+	if !strings.Contains(err.Error(), "no permission") {
+		t.Fatalf("Read err = %q, want the API errmsg", err.Error())
+	}
+}
+
+// TestRead_Sheet_SuccessUnchanged proves the guard is behavior-preserving for a
+// real 200 success carrying no envelope fields (the sheet body is returned
+// verbatim, not rejected as a parse/envelope error).
+func TestRead_Sheet_SuccessUnchanged(t *testing.T) {
+	srv := sheetReadMux(t, `{"spreadsheet":{"id":"sh-1"},"sheets":[{"id":"s1"}]}`)
+	c := withToken(newTestClient("https://example.invalid/token", srv.URL), suite.Token{AccessToken: "u-at"})
+
+	body, err := c.Read(context.Background(), "sheet", "sh-1")
+	if err != nil {
+		t.Fatalf("Read: want nil err on plain success, got %v", err)
+	}
+	if !strings.Contains(string(body), "sh-1") {
+		t.Fatalf("body = %s, want spreadsheet sh-1", string(body))
+	}
+}
+
 // TestRead_RequiresID proves an empty sheet id errors before the call.
 func TestRead_RequiresID(t *testing.T) {
 	c := withToken(&Client{}, suite.Token{AccessToken: "at"})

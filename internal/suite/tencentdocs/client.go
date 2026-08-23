@@ -225,7 +225,31 @@ func (c *Client) sheetRead(ctx context.Context, sheetID string) ([]byte, error) 
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
 		c.apiBase+"/api/v1/spreadsheets/"+pathEscape(sheetID), nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
-	return c.doRaw(req, "sheet read")
+	raw, err := c.doRaw(req, "sheet read")
+	if err != nil {
+		return nil, err
+	}
+	// fix-dingtalk-tencentdocs-read-error-envelope: Tencent-Docs answers HTTP 200
+	// with an error envelope (`code`/`errcode`/`ret` + `errmsg`/`message`) on
+	// permission/validation errors. doRaw only guards non-200, so without this
+	// check the error envelope is returned as if it were the sheet content — the
+	// same silent-failure class fixed for the write path (sheetWrite) in v0.6.0
+	// and for feishu/wework reads in v0.5.0. Mirror that guard: surface the
+	// envelope as an error, else return the raw body (the --json agent-readable
+	// contract is unchanged on success).
+	var env struct {
+		Code    int    `json:"code"`    // some Tencent envelopes use int code
+		ErrCode int    `json:"errcode"` // legacy envelope
+		Ret     int    `json:"ret"`     // QQ-family ret/errmsg
+		ErrMsg  string `json:"errmsg"`
+		Message string `json:"message"`
+	}
+	_ = json.Unmarshal(raw, &env)
+	if env.Code != 0 || env.ErrCode != 0 || env.Ret != 0 {
+		return nil, fmt.Errorf("tencentdocs: sheet read code=%d errcode=%d ret=%d msg=%s",
+			env.Code, env.ErrCode, env.Ret, firstNonEmpty(env.ErrMsg, env.Message))
+	}
+	return raw, nil
 }
 
 func (c *Client) sheetWrite(ctx context.Context, sheetID string, body []byte) (string, error) {

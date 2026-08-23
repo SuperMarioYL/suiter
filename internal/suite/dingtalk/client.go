@@ -225,7 +225,32 @@ func (c *Client) calendarList(ctx context.Context) ([]byte, error) {
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.apiBase+"/v1.0/calendar/calendars", nil)
 	req.Header.Set("x-acs-dingtalk-access-token", tok)
-	return c.doRaw(req, "calendar list")
+	raw, err := c.doRaw(req, "calendar list")
+	if err != nil {
+		return nil, err
+	}
+	// fix-dingtalk-tencentdocs-read-error-envelope: DingTalk's calendar list
+	// endpoint answers HTTP 200 with an error envelope (REST `code`/`message` or
+	// legacy `errcode`/`errmsg`) on permission/validation errors. doRaw only
+	// guards non-200, so without this check the error envelope is returned as if
+	// it were the calendar list — the same silent-failure class fixed for the
+	// write path (calendarCreateEvent) in v0.6.0 and for feishu/wework reads in
+	// v0.5.0. Mirror that guard: surface the envelope as an error, else return
+	// the raw body (the --json agent-readable contract is unchanged on success).
+	var env struct {
+		Code    string `json:"code"`    // REST error envelope (non-empty on error)
+		Message string `json:"message"`
+		ErrCode int    `json:"errcode"` // legacy cgi-bin envelope
+		ErrMsg  string `json:"errmsg"`
+	}
+	_ = json.Unmarshal(raw, &env)
+	if env.Code != "" && env.Code != "0" {
+		return nil, fmt.Errorf("dingtalk: calendar list code=%s msg=%s", env.Code, env.Message)
+	}
+	if env.ErrCode != 0 {
+		return nil, fmt.Errorf("dingtalk: calendar list errcode=%d msg=%s", env.ErrCode, env.ErrMsg)
+	}
+	return raw, nil
 }
 
 func (c *Client) calendarGet(ctx context.Context, id string) ([]byte, error) {
@@ -235,7 +260,26 @@ func (c *Client) calendarGet(ctx context.Context, id string) ([]byte, error) {
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.apiBase+"/v1.0/calendar/calendars/"+pathEscape(id), nil)
 	req.Header.Set("x-acs-dingtalk-access-token", tok)
-	return c.doRaw(req, "calendar get")
+	raw, err := c.doRaw(req, "calendar get")
+	if err != nil {
+		return nil, err
+	}
+	// fix-dingtalk-tencentdocs-read-error-envelope: same guard as calendarList —
+	// a 200-body error envelope must be surfaced, not returned as the calendar.
+	var env struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+		ErrCode int    `json:"errcode"`
+		ErrMsg  string `json:"errmsg"`
+	}
+	_ = json.Unmarshal(raw, &env)
+	if env.Code != "" && env.Code != "0" {
+		return nil, fmt.Errorf("dingtalk: calendar get code=%s msg=%s", env.Code, env.Message)
+	}
+	if env.ErrCode != 0 {
+		return nil, fmt.Errorf("dingtalk: calendar get errcode=%d msg=%s", env.ErrCode, env.ErrMsg)
+	}
+	return raw, nil
 }
 
 func (c *Client) calendarCreateEvent(ctx context.Context, calendarID string, body []byte) (string, error) {
