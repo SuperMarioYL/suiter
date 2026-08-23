@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "content_version": "v0.6.0",
+  "content_version": "v0.7.0",
   "name": "suiter",
   "github": "https://github.com/SuperMarioYL/suiter",
   "host": "suiter.lei6393.com",
@@ -9,6 +9,11 @@
       "version": "v0.6.0",
       "en": "WeCom corpsecret no longer leaks via URL errors; suite HTTP calls now time out instead of hanging; config writes are concurrency-safe; dingtalk/tencentdocs writes no longer fake success on error envelopes.",
       "zh": "企微 corpsecret 不再通过 URL 错误泄露；套件 HTTP 调用现在会超时而非挂起；配置写入并发安全；钉钉/腾讯文档写入不再在错误信封上伪造成功。"
+    },
+    {
+      "version": "v0.7.0",
+      "date": "2026-08-24",
+      "note": "refresh: content re-verified for v0.7.0 (fix-dingtalk-tencentdocs-read-error-envelope — read paths now surface error envelopes instead of returning them as content)."
     }
   ],
   "lang": {
@@ -133,5 +138,6 @@
       "zh": "给 coding agent 接上飞书/钉钉/企微/腾讯文档的命令行工具",
       "en": "The CLI that connects coding agents to Feishu/DingTalk/WeCom/Tencent Docs"
     }
-  }
+  },
+  "generated_at": "2026-08-23T19:32:33Z"
 }
