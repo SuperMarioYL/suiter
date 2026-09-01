@@ -238,7 +238,7 @@ func (c *Client) calendarList(ctx context.Context) ([]byte, error) {
 	// v0.5.0. Mirror that guard: surface the envelope as an error, else return
 	// the raw body (the --json agent-readable contract is unchanged on success).
 	var env struct {
-		Code    string `json:"code"`    // REST error envelope (non-empty on error)
+		Code    string `json:"code"` // REST error envelope (non-empty on error)
 		Message string `json:"message"`
 		ErrCode int    `json:"errcode"` // legacy cgi-bin envelope
 		ErrMsg  string `json:"errmsg"`

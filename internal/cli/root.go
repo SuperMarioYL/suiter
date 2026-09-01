@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	version "github.com/SuperMarioYL/suiter"
 	"github.com/SuperMarioYL/suiter/internal/config"
 	"github.com/SuperMarioYL/suiter/internal/suite"
 	"github.com/SuperMarioYL/suiter/internal/suite/dingtalk"
@@ -34,6 +35,12 @@ func NewRoot() *cobra.Command {
 4 套 OAuth 收敛成 1 次 ` + "`suiter login`" + `，让你的 Coding Agent 读写你自己的飞书文档、钉钉日历、企微消息、腾讯文档。
 所有子命令支持 --json 输出 agent-readable JSON。`,
 		SilenceUsage: true,
+		// fix-cli-version-self-report-and-surface-drift: cobra only registers
+		// a --version flag when root.Version is set. The shipped v0.7.0 binary
+		// never set it, so `suiter --version` errored with "unknown flag:
+		// --version". Source the version from the canonical VERSION file via
+		// go:embed (package version) so no duplicated literal can drift.
+		Version: version.Version,
 	}
 
 	// viper: env vars + optional config file.

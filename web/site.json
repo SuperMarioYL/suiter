@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "content_version": "v0.7.0",
+  "content_version": "v0.8.0",
   "name": "suiter",
   "github": "https://github.com/SuperMarioYL/suiter",
   "host": "suiter.lei6393.com",
@@ -14,6 +14,11 @@
       "version": "v0.7.0",
       "date": "2026-08-24",
       "note": "refresh: content re-verified for v0.7.0 (fix-dingtalk-tencentdocs-read-error-envelope — read paths now surface error envelopes instead of returning them as content)."
+    },
+    {
+      "version": "v0.8.0",
+      "en": "suiter --version now reports the release: cobra's --version was never wired, so the binary could not self-report its version. A lockstep regression test now guards the VERSION file, the --version output, the site content_version, and the CHANGELOG head entry so a bump can no longer leave a surface a release behind.",
+      "zh": "suiter --version 现在能正确报出版本号：此前 cobra 的 --version 从未接线，二进制无法自报版本。新增一致性回归测试守卫 VERSION 文件、--version 输出、站点 content_version 与 CHANGELOG 头条，升级时不再漏改某个版本面。"
     }
   ],
   "lang": {

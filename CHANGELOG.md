@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 for its shipped Go binary.
 
+## [v0.8.0] — 2026-09-02
+
+One regression-class fix folded from the v0.8.0 amendment (a code-verified
+bug-hunt; 0 raw/prose patches). No new features; the four-suite unification,
+the m3 agent-loop star-moment, and the prior read/write error-envelope guards
+stand unchanged.
+
+### Fixed
+
+- **fix-cli-version-self-report-and-surface-drift** — the shipped binary
+  could not self-report its version: cobra's `root.Version` was never set, so
+  `suiter --version` errored with `unknown flag: --version`. The v0.7.0
+  release also left the derived version surfaces stale (site
+  `content_version` lagged a release and CHANGELOG had no v0.7.0 entry). Fix:
+  add a root `version` package that `//go:embed`s the canonical VERSION file
+  (single source of truth, baked into the binary at build time with no
+  duplicated literal that can drift) and set `root.Version` so
+  `suiter --version` prints `suiter version v0.8.0`. A lockstep regression
+  test now asserts the embed, the VERSION file, `web/site.json`
+  `content_version`, and the CHANGELOG head entry all agree, so the next bump
+  cannot leave a surface a release behind. (`version.go`,
+  `internal/cli/root.go`)
+
+## [v0.7.0] — 2026-08-23
+
+One regression-class fix from the v0.7.0 amendment: the dingtalk
+`calendarList`/`calendarGet` and tencentdocs `sheetRead` READ paths now
+surface HTTP-200 error envelopes instead of returning them as the resource
+content (the same silent-failure class the v0.5.0/v0.6.0 fixes corrected in
+sibling paths). (`internal/suite/dingtalk/client.go`,
+`internal/suite/tencentdocs/client.go`)
+
 ## [v0.6.0] — 2026-08-19
 
 Four regression-class fixes folded from the v0.6.0 amendment (a code-verified
