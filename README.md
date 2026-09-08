@@ -1,185 +1,130 @@
-<div align="right"><sub><a href="./README.en.md">English</a>&nbsp;&nbsp;⇄&nbsp;&nbsp;<b>简体中文</b></sub></div>
+[English](README.en.md) | **简体中文**
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/hero-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="./assets/hero-light.svg">
-  <img src="./assets/hero-light.svg" width="880" alt="suiter — Coding-Agent CLI for 飞书/钉钉/企微/腾讯文档">
+  <source media="(max-width: 640px) and (prefers-color-scheme: dark)" srcset="assets/presentation/hero-mobile-dark.svg">
+  <source media="(max-width: 640px)" srcset="assets/presentation/hero-mobile-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/presentation/hero-dark.svg">
+  <img src="assets/presentation/hero-light.svg" width="1000" alt="通过统一 CLI 调用飞书、钉钉、企业微信和腾讯文档的已实现资源接口，分别管理各套件授权。">
 </picture>
 
-<p align="center"><sub>googleworkspace/cli 但接了飞书/钉钉/企微/腾讯文档——一个 Go 写的 agent CLI，让你的 Coding Agent 读写你自己的飞书文档、钉钉日历、企微消息、腾讯文档，把 4 套 OAuth 收敛成 1 次 <code>suiter login</code>。Agent 现在 org-wide 地 just work 在 CN 办公套件数据上，零 per-app 集成代码。</sub></p>
+**通过统一 CLI 调用飞书、钉钉、企业微信和腾讯文档的已实现资源接口，分别管理各套件授权。**
 
-<p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT"></a>
-  <a href="https://github.com/SuperMarioYL/suiter/releases/latest"><img src="https://img.shields.io/github/v/release/SuperMarioYL/suiter?label=release&color=blue" alt="latest release"></a>
-  <img src="https://img.shields.io/github/actions/workflow/status/SuperMarioYL/suiter/ci.yml?label=CI&branch=main" alt="CI">
-  <img src="https://img.shields.io/badge/Go-1.24-0071E3?logo=go&logoColor=white" alt="Go 1.24">
-  <img src="https://img.shields.io/badge/Coding%20Agents-ready-5E5CE6" alt="Coding Agents">
-  <img src="https://img.shields.io/badge/Coding%20Agent-CLI-10A37F" alt="Coding Agent">
-</p>
+`v0.8.0` · `Go 1.24+` · [MIT](LICENSE)
 
-> **一次 `suiter login` 顶掉 4 套手搓 OAuth 集成——你的 Coding Agent 读写你自己的飞书文档 / 钉钉日历 / 企微消息 / 腾讯文档，零 per-app 胶水代码。**
+[Website](https://suiter.lei6393.com) · [Demo record](docs/demo-results.json)
 
-## 目录
+## 为什么使用
 
-- [什么是 suiter](#什么是-suiter)
-- [为什么是现在](#为什么是现在)
-- [架构](#架构)
-- [安装](#安装)
-- [快速开始](#快速开始)
-- [用法](#用法)
-- [套件](#套件)
-- [Agent](#agent)
-- [Demo](#demo)
-- [配置](#配置)
-- [路线图](#路线图)
-- [License](#license)
+多个办公套件有不同资源类型和登录方式。suiter 用 Suite 接口与公共命令分发器统一调用形状，把各套件令牌放进同一个本地存储。统一命令不意味着一次登录能授权所有套件；应用配置、权限和登录仍按套件完成。
 
-<h2><img src="https://api.iconify.design/tabler:package.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> 什么是 suiter</h2>
-
-suiter 是一个用 Go 写的命令行二进制，你的 Coding Agent 调用它来读写你自己的 CN 办公套件数据。每个子命令都说 `--json` stdio，agent（Claude Code / Trae / Cline）可以直接 pipe 进上下文。一个 `Suite` 接口、一套语法：`suiter <suite> <verb> <id>`。
-
-<h2><img src="https://api.iconify.design/tabler:bulb.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> 为什么是现在</h2>
-
-googleworkspace/cli 让你的 Agent 读 Google Workspace——但 CN 开发者真正活在飞书/钉钉/企微/腾讯文档里，而 Google Workspace 被 CN 数据出境挡住。每家 CN 套件各自的 OpenAPI + OAuth + 事件 schema 各不相同，今天你为了让 Claude Code 读一篇飞书文档，得手搓 4 套 OAuth（外加 paging、token 刷新、event 订阅）。suiter 把这笔「under the hood」的工程税一次付清并缓存到 `~/.suiter/tokens.json`，你的 Agent org-wide 地 just work 在 CN 办公套件数据上。
-
-```
-Before — 4 套手搓 OAuth 集成              After — 1 次 suiter login
-┌──────────────────────────────────┐     ┌───────────────────────────────┐
-│ feishu SDK   → OAuth #1 ┐        │     │ $ suiter login feishu         │
-│ dingtalk SDK → OAuth #2 │ 4× glue│     │ $ suiter login dingtalk       │
-│ wework SDK   → OAuth #3 │        │     │ $ suiter login wework         │
-│ tencent SDK  → OAuth #4 ┘        │     │ $ suiter login tencentdocs    │
-│ (各自 paging / refresh / events) │     │ → ~/.suiter/tokens.json (1 个) │
-└──────────────────────────────────┘     └───────────────────────────────┘
-```
-
-<h2><img src="https://api.iconify.design/tabler:topology-star-3.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> 架构</h2>
+## 架构
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/atlas-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="./assets/atlas-light.svg">
-  <img src="./assets/atlas-light.svg" width="880" alt="架构：Coding Agent → suiter CLI (Suite/Registry/TokenStore) → 飞书/钉钉/企微/腾讯文档">
+  <source media="(max-width: 640px) and (prefers-color-scheme: dark)" srcset="assets/presentation/architecture-mobile-dark.svg">
+  <source media="(max-width: 640px)" srcset="assets/presentation/architecture-mobile-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/presentation/architecture-dark.svg">
+  <img src="assets/presentation/architecture-light.svg" width="1000" alt="Cobra CLI 构建四个客户端的注册表，读操作返回 JSON，写操作从 stdin 接收 JSON。TokenStore 保存并检查各套件令牌；客户端负责 HTTP 与 API 错误。agent 子命令另有读取飞书、调用摘要模型、创建钉钉日历事件的组合路径。">
 </picture>
 
-单二进制，进程内，无 daemon、无 server、无 K8s：Cobra CLI → Suite 注册表 → 4 个套件客户端，背后是共享的 `TokenStore`（`~/.suiter/tokens.json`）和一个薄的 OpenAI 兼容 LLM 客户端（GLM / DeepSeek，不自建模型）。
+Cobra CLI 构建四个客户端的注册表，读操作返回 JSON，写操作从 stdin 接收 JSON。TokenStore 保存并检查各套件令牌；客户端负责 HTTP 与 API 错误。agent 子命令另有读取飞书、调用摘要模型、创建钉钉日历事件的组合路径。
 
-<h2><img src="https://api.iconify.design/tabler:download.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> 安装</h2>
+源码入口：[internal/cli/root.go](internal/cli/root.go) · [internal/cli/auth.go](internal/cli/auth.go) · [internal/cli/agent.go](internal/cli/agent.go) · [internal/config/store.go](internal/config/store.go) · [internal/suite/registry.go](internal/suite/registry.go) · [internal/suite/feishu/client.go](internal/suite/feishu/client.go) · [internal/suite/dingtalk/client.go](internal/suite/dingtalk/client.go) · [internal/suite/wework/client.go](internal/suite/wework/client.go) · [internal/suite/tencentdocs/client.go](internal/suite/tencentdocs/client.go)
 
-```bash
-go install github.com/SuperMarioYL/suiter@latest
-```
+## 安装
 
-需要 Go 1.24+。二进制落到 `$GOPATH/bin`。
-
-<h2><img src="https://api.iconify.design/tabler:rocket.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> 快速开始</h2>
+需要 Go 1.24+。以下 go run 使用生产客户端和合成过期令牌，不读取用户令牌文件、不启动登录或发送服务请求。
 
 ```bash
-export SUITER_FEISHU_APP_ID=cli_xxx SUITER_FEISHU_APP_SECRET=xxx   # open.feishu.cn 控制台取
-suiter login feishu                                                  # 一次 OAuth loopback，token 缓存
-suiter feishu doc read <doc-id> --json                               # 文档正文 → agent-readable JSON
+git clone https://github.com/SuperMarioYL/suiter.git
+cd suiter
+go build -o bin/suiter ./cmd/suiter
 ```
 
-<details><summary>sample output</summary>
+## 快速开始
 
-```json
-{
-  "code": 0,
-  "msg": "success",
-  "data": { "content": "周会纪要：1) 7/30 发版 ... 2) 负责人 @张三 ..." }
-}
-```
-
-</details>
-
-<h2><img src="https://api.iconify.design/tabler:terminal-2.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> 用法</h2>
+对四个已注册客户端分别请求 doc/calendar/message/sheet，验证过期令牌均返回明确的重新登录提示。它是离线鉴权前置检查，不是实际账户读写成功记录。
 
 ```bash
-# 1) 一次 OAuth loopback，token 缓存到 ~/.suiter/tokens.json
-suiter login feishu
-
-# 2) 飞书文档正文 → JSON 输出到 stdout
-suiter feishu doc read <doc-id> --json
-
-# 3) pipe 进你的 Coding Agent
-suiter feishu doc read <doc-id> --json | your-agent summarize
-
-# 4) 列出已注册套件
-suiter suites
-
-# 5) m3 端到端 star-moment：读飞书 → GLM 摘要 → 钉钉日历事件
-suiter agent run summarize-and-schedule <doc-id>
+go run ./examples/presentation-demo
 ```
 
-更多见 [`examples/`](./examples)。
+完整输入与执行步骤见上方命令及 [Demo 记录](docs/demo-results.json)。
 
-<h2><img src="https://api.iconify.design/tabler:layout-grid.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> 套件</h2>
+## 使用
 
-| 套件 | 状态 | 动词 |
-|---|---|---|
-| 飞书 feishu | m1 ✓ | `login`，`doc read` |
-| 钉钉 dingtalk | m2 ✓ | `login`，`calendar list/get/create` |
-| 企微 wework | m2 ✓ | `login`，`message send/read` |
-| 腾讯文档 tencentdocs | m3 ✓ | `login`，`sheet read/write` |
+```bash
+./bin/suiter suites
+./bin/suiter login feishu
+./bin/suiter feishu doc read DOCUMENT_ID --json
+./bin/suiter logout feishu
+```
+实际使用前配置飞书应用凭证，将 DOCUMENT_ID 替换为可访问的文档 ID。其他资源用 `<suite> <kind> <verb> [id]`；create/send/write 从 stdin 读 JSON。`agent run summarize-and-schedule DOCUMENT_ID` 会调用模型并创建日历事件，需先准备对应授权与输入。
 
-每个套件实现同一个 `Suite` 接口（`Name` / `Login` / `Read` / `Write`），挂在同一个 `Suite` 注册表后；新增套件动词零新增 CLI 胶水——这就是统一抽象要证明的事。
+## 实际 Demo
 
-<h2><img src="https://api.iconify.design/tabler:robot.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> Agent</h2>
+<picture>
+  <source media="(max-width: 640px) and (prefers-color-scheme: dark)" srcset="assets/presentation/process-mobile-dark.svg">
+  <source media="(max-width: 640px)" srcset="assets/presentation/process-mobile-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/presentation/process-dark.svg">
+  <img src="assets/presentation/process-light.svg" width="1000" alt="对四个已注册客户端分别请求 doc/calendar/message/sheet，验证过期令牌均返回明确的重新登录提示。它是离线鉴权前置检查，不是实际账户读写成功记录。">
+</picture>
 
-明星时刻（m3）是一个 60 秒的 loop：`suiter feishu doc read <id> --json` → GLM/DeepSeek `summarize` → `suiter dingtalk calendar create`。v0.2 在每个动词上开放 `--json` stdio 且把 钉钉/企微 真正接通到同一套 `suiter <suite> <verb>` 语法后，Agent 今天就能 orchestrate 跨三套；v0.3 把 `suiter agent run summarize-and-schedule` 端到端串起来——读飞书文档 → GLM/DeepSeek 摘要 → 写钉钉日历事件，一个命令搞定。完整的 MCP server 仍在路线——先把统一抽象坐实成 4 套真实现，再封 MCP。
+### 检查过期令牌
 
-<h2><img src="https://api.iconify.design/tabler:photo.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> Demo</h2>
-
-**suiter: 4 OAuth → 1 CLI in 60s（m3 agent loop —— 读飞书 → GLM 摘要 → 钉钉日历）**
-
-![demo](assets/demo.gif)
-
-> 由 CI 从 [`docs/demo.tape`](./docs/demo.tape)（vhs）渲染。手动刷新用 `demo` workflow。上面 gif 跑的是无凭证也能渲染的统一语法巡览；完整 60s 录屏脚本如下：
+四个客户端在资源访问前拒绝过期令牌。
 
 ```text
-suiter login feishu       # one OAuth loopback, token cached in ~/.suiter/tokens.json
-suiter login dingtalk     # same flow, same shared TokenStore (m2 unified)
-suiter feishu doc read <id> --json          # agent-readable doc body
-suiter agent run summarize-and-schedule <feishu-doc-id>   # read 飞书 → GLM summarize → 钉钉 calendar event (m3 star-moment)
-suiter dingtalk calendar list --json        # unified verb, same grammar, no per-suite CLI glue
-suiter logout wework      # 清除缓存的 token（换号 / 撤销）— 幂等，没缓存也不报错
+$ go run ./examples/presentation-demo
+[
+  {
+    "resource": "doc",
+    "result": "feishu: token expired (re-run `suiter login feishu`)",
+    "suite": "feishu"
+  },
+  {
+    "resource": "calendar",
+    "result": "dingtalk: token expired (re-run `suiter login dingtalk`)",
+    "suite": "dingtalk"
+  },
+  {
+    "resource": "message",
+    "result": "wework: token expired (re-run `suiter login wework`)",
+    "suite": "wework"
+  },
+  {
+    "resource": "sheet",
+    "result": "tencentdocs: token expired (re-run `suiter login tencentdocs`)",
+    "suite": "tencentdocs"
+  }
+]
 ```
 
-<h2><img src="https://api.iconify.design/tabler:adjustments.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> 配置</h2>
+## 能力与接入
 
-优先级：命令行 `--config <path>` > 环境变量 > `~/.suiter/config.yaml`。
+<picture>
+  <source media="(max-width: 640px) and (prefers-color-scheme: dark)" srcset="assets/presentation/integrations-mobile-dark.svg">
+  <source media="(max-width: 640px)" srcset="assets/presentation/integrations-mobile-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/presentation/integrations-dark.svg">
+  <img src="assets/presentation/integrations-light.svg" width="1000" alt="飞书当前核心读 doc；钉钉为 calendar，企微为 message，腾讯文档为 sheet。客户端接口是否已实现，与某个账户是否具备相应资源权限是两项条件。演示只验证令牌过期时的本地前置检查。">
+</picture>
 
-| Key | 环境变量 | 默认 | 含义 |
-|---|---|---|---|
-| `feishu_app_id` | `SUITER_FEISHU_APP_ID` | `""` | 飞书 app_id |
-| `feishu_app_secret` | `SUITER_FEISHU_APP_SECRET` | `""` | 飞书 app_secret |
-| `dingtalk_app_key` | `SUITER_DINGTALK_APP_KEY` | `""` | 钉钉 appKey（v0.2 已通） |
-| `dingtalk_app_secret` | `SUITER_DINGTALK_APP_SECRET` | `""` | 钉钉 appSecret（v0.2 已通） |
-| `wework_corp_id` | `SUITER_WEWORK_CORP_ID` | `""` | 企微 corpId（v0.2 已通） |
-| `wework_agent_id` | `SUITER_WEWORK_AGENT_ID` | `""` | 企微 agentId（v0.2 已通） |
-| `wework_secret` | `SUITER_WEWORK_SECRET` | `""` | 企微 secret（v0.2 已通） |
-| `tencentdocs_client_id` | `SUITER_TENCENTDOCS_CLIENT_ID` | `""` | 腾讯文档 clientId（v0.3 已通） |
-| `tencentdocs_client_secret` | `SUITER_TENCENTDOCS_CLIENT_SECRET` | `""` | 腾讯文档 clientSecret（v0.3 已通） |
-| `llm_base_url` | `SUITER_LLM_BASE_URL` | GLM `open.bigmodel.cn` | OpenAI-compatible 模型根（GLM/DeepSeek） |
-| `llm_api_key` | `SUITER_LLM_API_KEY` | `""` | GLM/DeepSeek API key（`agent run` 摘要步骤必需） |
-| `llm_model` | `SUITER_LLM_MODEL` | 按 base_url 默认（GLM→`glm-4.6` / DeepSeek→`deepseek-chat`） | 模型名；不设则按 provider 默认，显式设置永远生效 |
+飞书当前核心读 doc；钉钉为 calendar，企微为 message，腾讯文档为 sheet。客户端接口是否已实现，与某个账户是否具备相应资源权限是两项条件。演示只验证令牌过期时的本地前置检查。
 
-token 缓存在 `~/.suiter/tokens.json`（0600 权限，单 dev 本机；多用户 / 云 vault 明确 out of scope）。
 
-<h2><img src="https://api.iconify.design/tabler:map-2.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> 路线图</h2>
 
-- [x] **m1** — `suiter login feishu` + `suiter feishu doc read <id> --json`；token 缓存到 `~/.suiter/tokens.json`，跨 session 存活。
-- [x] **m2** — 钉钉（`calendar list/get/create`）+ 企微（`message send/read`）挂在同一套 `suiter <suite> <verb>` 语法 + 共享 `TokenStore` 后；通用 dispatcher 让新增套件动词零新增 CLI 胶水，3 套统一证明完毕。
-- [x] **m3** — 腾讯文档（`sheet read/write`）+ GLM/DeepSeek 摘要器；端到端 `suiter agent run summarize-and-schedule`（读飞书 → 摘要 → 钉钉日历事件）。v0.3 同时修掉 dingtalk/wework 缓存 token 过期未检的缺陷（镜像 v0.2 的 feishu 修复）。
-- [ ] 未来 — MCP server、团队 auth、托管 token vault。
+## 配置
 
-推送后建议加 repo topics：
+配置文件由 `--config` 选择，默认 `~/.suiter/config.yaml`；SUITER_ 环境变量可覆盖配置值。四组凭证前缀为 FEISHU_APP、DINGTALK_APP、WEWORK 与 TENCENTDOCS_CLIENT，模型使用 SUITER_LLM_BASE_URL/API_KEY/MODEL。令牌在 `~/.suiter/tokens.json`，权限 0600。logout 清理本地缓存，不等同服务端撤销授权；过期令牌需要重新登录。
 
-```bash
-gh repo edit --add-topic coding-agent --add-topic cli --add-topic feishu --add-topic dingtalk
-```
+## 路线图与范围
 
-<h2><img src="https://api.iconify.design/tabler:license.svg?color=%230071E3&width=24" height="22" align="absmiddle" alt=""> License</h2>
+当前有四个客户端、统一资源分发、令牌缓存与组合摘要流程。MCP、团队身份、托管密钥库和完整刷新流程仍是后续方向。
 
-MIT — 见 [LICENSE](./LICENSE)。在 [GitHub Issues](https://github.com/SuperMarioYL/suiter/issues) 提 issue 或 PR。
+- 本次未登录真实套件，未验证平台接口、权限或跨套件写入；原有 GIF 为无凭证语法巡览。
+- 统一 CLI 不提供组织级授权，也不保证四个服务所有功能或所有账户可用。
 
-<p align="center"><sub><a href="./LICENSE">MIT</a> © 2026 SuperMarioYL</sub></p>
+![Terminal recording](assets/demo.gif) · [Recording script](docs/demo.tape)
+
+## 许可证
+
+[MIT](LICENSE)

@@ -1,0 +1,82 @@
+{
+  "name": "suiter",
+  "tagline": "Use one CLI for office-suite operations.",
+  "architecture": {
+    "title": "suiter / data flow",
+    "nodes": [
+      {
+        "title": "CLI dispatcher",
+        "detail": "Suite / resource / verb"
+      },
+      {
+        "title": "Suite registry",
+        "detail": "Four client implementations"
+      },
+      {
+        "title": "Token and HTTP clients",
+        "detail": "Per-suite auth / resource API"
+      },
+      {
+        "title": "JSON result",
+        "detail": "Stdout / optional workflow"
+      }
+    ],
+    "edges": [
+      [
+        0,
+        1
+      ],
+      [
+        1,
+        2
+      ],
+      [
+        2,
+        3
+      ]
+    ]
+  },
+  "process": {
+    "title": "suiter / example workflow",
+    "steps": [
+      {
+        "title": "Supply expired token",
+        "detail": "Explicit synthetic value"
+      },
+      {
+        "title": "Try four resource reads",
+        "detail": "Production client methods"
+      },
+      {
+        "title": "Stop before network",
+        "detail": "Actionable re-login errors"
+      }
+    ],
+    "result": "All four clients reject the expired synthetic token before resource access."
+  },
+  "integrations": {
+    "title": "suiter / supported routes",
+    "items": [
+      {
+        "title": "Feishu",
+        "detail": "Document read"
+      },
+      {
+        "title": "DingTalk",
+        "detail": "Calendar operations"
+      },
+      {
+        "title": "WeCom",
+        "detail": "Message operations"
+      },
+      {
+        "title": "Tencent Docs",
+        "detail": "Sheet operations"
+      },
+      {
+        "title": "Model endpoint",
+        "detail": "Optional summary step"
+      }
+    ]
+  }
+}

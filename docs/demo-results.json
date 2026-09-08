@@ -1,0 +1,17 @@
+{
+  "version": "0.8.0",
+  "scope": "Offline authentication preflight through all four production suite clients with an explicit expired synthetic token. No account store is read, no service requests are sent and no login, document, message or calendar operation succeeds.",
+  "inputs": [
+    {
+      "path": "examples/presentation-demo/main.go",
+      "sha256": "bd6df2f428c97d4160a083437c473d96a2d05526147eb6751c4f3eb823b1427e"
+    }
+  ],
+  "steps": [
+    {
+      "command": "go run ./examples/presentation-demo",
+      "output": "[\n  {\n    \"resource\": \"doc\",\n    \"result\": \"feishu: token expired (re-run `suiter login feishu`)\",\n    \"suite\": \"feishu\"\n  },\n  {\n    \"resource\": \"calendar\",\n    \"result\": \"dingtalk: token expired (re-run `suiter login dingtalk`)\",\n    \"suite\": \"dingtalk\"\n  },\n  {\n    \"resource\": \"message\",\n    \"result\": \"wework: token expired (re-run `suiter login wework`)\",\n    \"suite\": \"wework\"\n  },\n  {\n    \"resource\": \"sheet\",\n    \"result\": \"tencentdocs: token expired (re-run `suiter login tencentdocs`)\",\n    \"suite\": \"tencentdocs\"\n  }\n]\n",
+      "exit_code": 0
+    }
+  ]
+}
