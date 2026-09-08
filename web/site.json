@@ -104,6 +104,10 @@
           "alt": {
             "zh": "对四个已注册客户端分别请求 doc/calendar/message/sheet，验证过期令牌均返回明确的重新登录提示。它是离线鉴权前置检查，不是实际账户读写成功记录。",
             "en": "Request doc/calendar/message/sheet through four clients and verify each returns a clear re-login error for an expired token. This is offline authentication preflight, not evidence of successful account reads or writes."
+          },
+          "mobile": {
+            "light": "/assets/presentation/process-mobile-light.svg",
+            "dark": "/assets/presentation/process-mobile-dark.svg"
           }
         }
       },
@@ -122,6 +126,10 @@
           "alt": {
             "zh": "Cobra CLI 构建四个客户端的注册表，读操作返回 JSON，写操作从 stdin 接收 JSON。TokenStore 保存并检查各套件令牌；客户端负责 HTTP 与 API 错误。agent 子命令另有读取飞书、调用摘要模型、创建钉钉日历事件的组合路径。",
             "en": "The Cobra CLI builds a registry of four clients. Reads return JSON and writes consume JSON from stdin. TokenStore persists per-suite tokens; clients validate tokens and handle HTTP/API errors. The agent command separately combines a Feishu read, model summary and DingTalk event creation."
+          },
+          "mobile": {
+            "light": "/assets/presentation/architecture-mobile-light.svg",
+            "dark": "/assets/presentation/architecture-mobile-dark.svg"
           }
         }
       },
@@ -140,6 +148,10 @@
           "alt": {
             "zh": "飞书当前核心读 doc；钉钉为 calendar，企微为 message，腾讯文档为 sheet。客户端接口是否已实现，与某个账户是否具备相应资源权限是两项条件。演示只验证令牌过期时的本地前置检查。",
             "en": "Feishu’s current core reads docs; DingTalk covers calendars, WeCom messages and Tencent Docs sheets. An implemented client and an account with the necessary permissions are separate requirements. The demo only checks local handling of expired tokens."
+          },
+          "mobile": {
+            "light": "/assets/presentation/integrations-mobile-light.svg",
+            "dark": "/assets/presentation/integrations-mobile-dark.svg"
           }
         }
       }
@@ -233,5 +245,22 @@
   "footer": {
     "tag": "0.8.0 · Go 1.24+ · MIT"
   },
-  "content_version": "v0.8.0"
+  "content_version": "v0.8.0",
+  "changelog": [
+    {
+      "version": "v0.6.0",
+      "en": "WeCom corpsecret no longer leaks via URL errors; suite HTTP calls now time out instead of hanging; config writes are concurrency-safe; dingtalk/tencentdocs writes no longer fake success on error envelopes.",
+      "zh": "企微 corpsecret 不再通过 URL 错误泄露；套件 HTTP 调用现在会超时而非挂起；配置写入并发安全；钉钉/腾讯文档写入不再在错误信封上伪造成功。"
+    },
+    {
+      "version": "v0.7.0",
+      "date": "2026-08-24",
+      "note": "refresh: content re-verified for v0.7.0 (fix-dingtalk-tencentdocs-read-error-envelope — read paths now surface error envelopes instead of returning them as content)."
+    },
+    {
+      "version": "v0.8.0",
+      "en": "suiter --version now reports the release: cobra's --version was never wired, so the binary could not self-report its version. A lockstep regression test now guards the VERSION file, the --version output, the site content_version, and the CHANGELOG head entry so a bump can no longer leave a surface a release behind.",
+      "zh": "suiter --version 现在能正确报出版本号：此前 cobra 的 --version 从未接线，二进制无法自报版本。新增一致性回归测试守卫 VERSION 文件、--version 输出、站点 content_version 与 CHANGELOG 头条，升级时不再漏改某个版本面。"
+    }
+  ]
 }
