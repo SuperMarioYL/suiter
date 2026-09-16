@@ -10,7 +10,7 @@
   },
   "meta": {
     "visual_profile": "neon-particle",
-    "content_version": "0.8.0",
+    "content_version": "0.9.0",
     "demo_source": "docs/demo-results.json"
   },
   "hero": {
@@ -243,10 +243,15 @@
     }
   ],
   "footer": {
-    "tag": "0.8.0 · Go 1.24+ · MIT"
+    "tag": "0.9.0 · Go 1.24+ · MIT"
   },
-  "content_version": "v0.8.0",
+  "content_version": "v0.9.0",
   "changelog": [
+    {
+      "version": "v0.9.0",
+      "en": "Four correctness fixes on the agent-critical paths: the agent-loop DingTalk calendar event now carries start/end.time in RFC3339 plus timeZone (the old body put a datetime string in the all-day date field and was rejected); the configured WeCom agentid is injected into message-send bodies (WeCom requires it; the credential used to be accepted but unused); the feishu authorize URL now carries response_type=code and the dingtalk authorize URL scope=openid (both required params were missing, so login could not start); and suites/login/logout honor --json with agent-readable output as the CLI help advertises.",
+      "zh": "四个 agent 关键路径上的正确性修复：agent 循环生成的钉钉日历事件现在使用 RFC3339 的 start/end.time 加 timeZone（旧请求体把日期时间字符串放进全天事件的 date 字段，会被拒绝）；企微 message send 会自动注入已配置的 agentid（WeCom 必填，此前该凭证被接收但从未使用）；飞书授权 URL 补上必填的 response_type=code，钉钉授权 URL 补上必填的 scope=openid（缺失时登录根本无法发起）；suites/login/logout 现在按帮助文档承诺支持 --json 输出 agent 可读 JSON。"
+    },
     {
       "version": "v0.6.0",
       "en": "WeCom corpsecret no longer leaks via URL errors; suite HTTP calls now time out instead of hanging; config writes are concurrency-safe; dingtalk/tencentdocs writes no longer fake success on error envelopes.",

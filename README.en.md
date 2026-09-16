@@ -9,7 +9,7 @@
 
 **Use a shared CLI for implemented Feishu, DingTalk, WeCom and Tencent Docs resource APIs while managing authorization separately for each suite.**
 
-`v0.8.0` · `Go 1.24+` · [MIT](LICENSE)
+`v0.9.0` · `Go 1.24+` · [MIT](LICENSE)
 
 [Website](https://suiter.lei6393.com) · [Demo record](docs/demo-results.json)
 

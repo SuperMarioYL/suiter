@@ -1,5 +1,5 @@
 {
-  "version": "0.8.0",
+  "version": "0.9.0",
   "scope": "Offline authentication preflight through all four production suite clients with an explicit expired synthetic token. No account store is read, no service requests are sent and no login, document, message or calendar operation succeeds.",
   "inputs": [
     {

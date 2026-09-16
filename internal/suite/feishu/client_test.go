@@ -420,3 +420,16 @@ func TestRead_DocRawContent_ErrorEnvelope(t *testing.T) {
 // Ensure bytes is used (the JSON body fix) — keeps imports honest if the
 // above tests are trimmed later.
 var _ = bytes.NewReader
+
+// TestAuthURLIncludesResponseType (fix-oauth-authorize-url-required-params)
+// proves the authorize URL carries response_type=code, which Feishu's
+// authorize contract requires (fixed value "code"). v0.8.0 built the URL
+// without it, so the authorize page rejected the request before the user
+// could consent and `suiter login feishu` could not start the flow.
+func TestAuthURLIncludesResponseType(t *testing.T) {
+	c := NewClient("cli_x", "sec")
+	got := c.authURL("http://localhost:1/callback", "st")
+	if !strings.Contains(got, "response_type=code") {
+		t.Fatalf("authURL = %q, want response_type=code (Feishu authorize requires it)", got)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -249,5 +250,50 @@ func TestNewLLMClientFromConfig_DefaultModelByProvider(t *testing.T) {
 				t.Fatalf("model = %q, want %q (provider-based model defaulting broken)", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestCalendarEventBodyUsesRFC3339Time (fix-dingtalk-event-datetime-format)
+// proves the agent-loop calendar event carries start/end.time in RFC3339 with
+// an explicit offset plus timeZone — NOT a "yyyy-MM-dd HH:mm:ss" datetime
+// string in the `date` field. DingTalk's create-event contract defines
+// start.date as an ALL-DAY event date (yyyy-MM-dd) and start.time (RFC3339)
+// + timeZone for timed events; the v0.8.0 body was invalid under both shapes,
+// so the m3 star-moment write was rejected at the last step.
+func TestCalendarEventBodyUsesRFC3339Time(t *testing.T) {
+	evt, err := calendarEventFromSummary("评审会议：确定 v0.9.0 范围，负责人：李雷")
+	if err != nil {
+		t.Fatalf("calendarEventFromSummary: %v", err)
+	}
+	var e struct {
+		Summary string            `json:"summary"`
+		Start   map[string]string `json:"start"`
+		End     map[string]string `json:"end"`
+	}
+	if err := json.Unmarshal(evt, &e); err != nil {
+		t.Fatalf("parse event body %s: %v", evt, err)
+	}
+	for _, stage := range []struct {
+		key string
+		m   map[string]string
+	}{{"start", e.Start}, {"end", e.End}} {
+		if _, hasDate := stage.m["date"]; hasDate {
+			t.Errorf("%s carries a date key — DingTalk treats date as an ALL-DAY field (yyyy-MM-dd); a timed event needs time+timeZone", stage.key)
+		}
+		tv, hasTime := stage.m["time"]
+		if !hasTime {
+			t.Errorf("%s missing time key (want RFC3339 with explicit offset)", stage.key)
+			continue
+		}
+		ok, _ := regexp.MatchString(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}([+-]\d{2}:\d{2}|Z)$`, tv)
+		if !ok {
+			t.Errorf("%s.time = %q, want RFC3339 with explicit offset (yyyy-MM-ddTHH:mm:ss±hh:mm)", stage.key, tv)
+		}
+		if stage.m["timeZone"] == "" {
+			t.Errorf("%s.timeZone empty — DingTalk expects a timeZone for timed events", stage.key)
+		}
+	}
+	if e.Summary != "评审会议：确定 v0.9.0 范围，负责人：李雷" {
+		t.Errorf("summary = %q, want the untruncated input (≤80 runes)", e.Summary)
 	}
 }

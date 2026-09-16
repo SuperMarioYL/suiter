@@ -18,6 +18,6 @@ import (
 //go:embed VERSION
 var versionRaw string
 
-// Version is the shipped release version (e.g. "v0.8.0"), read from VERSION
+// Version is the shipped release version (e.g. "v0.9.0"), read from VERSION
 // and trimmed of surrounding whitespace.
 var Version = strings.TrimSpace(versionRaw)

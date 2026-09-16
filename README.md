@@ -9,7 +9,7 @@
 
 **通过统一 CLI 调用飞书、钉钉、企业微信和腾讯文档的已实现资源接口，分别管理各套件授权。**
 
-`v0.8.0` · `Go 1.24+` · [MIT](LICENSE)
+`v0.9.0` · `Go 1.24+` · [MIT](LICENSE)
 
 [Website](https://suiter.lei6393.com) · [Demo record](docs/demo-results.json)
 

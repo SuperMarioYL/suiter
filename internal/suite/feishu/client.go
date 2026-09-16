@@ -165,6 +165,11 @@ func (c *Client) authURL(redirect, state string) string {
 	q.Set("app_id", c.appID)
 	q.Set("redirect_uri", redirect)
 	q.Set("state", state)
+	// fix-oauth-authorize-url-required-params: Feishu's authorize contract
+	// requires response_type (fixed value "code"); the URL built without it
+	// made the authorize page reject the request before the user could
+	// consent, so `suiter login feishu` could not start the flow.
+	q.Set("response_type", "code")
 	return c.baseURL + authPath + "?" + q.Encode()
 }
 

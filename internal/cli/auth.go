@@ -2,13 +2,45 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 
 	"github.com/SuperMarioYL/suiter/internal/config"
 	"github.com/SuperMarioYL/suiter/internal/suite"
 )
+
+// writeLoginResult prints the login outcome: JSON via the --json flag
+// (fix-suite-subcommands-ignore-json-flag — the root help promises
+// "所有子命令支持 --json 输出 agent-readable JSON"), the historical plain
+// sentence without it.
+func writeLoginResult(out io.Writer, jsonFlag bool, name, path string) {
+	if jsonFlag {
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(map[string]string{"suite": name, "status": "cached", "path": path})
+		return
+	}
+	fmt.Fprintf(out, "%s: token cached at %s\n", name, path)
+}
+
+// writeLogoutResult prints the logout outcome in the same dual surface.
+func writeLogoutResult(out io.Writer, jsonFlag bool, name, status, path string) {
+	if jsonFlag {
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(map[string]string{"suite": name, "status": status, "path": path})
+		return
+	}
+	switch status {
+	case "not_logged_in":
+		fmt.Fprintf(out, "%s: not logged in\n", name)
+	default:
+		fmt.Fprintf(out, "%s: token cleared (%s)\n", name, path)
+	}
+}
 
 // newLoginCommand runs the OAuth loopback for a suite and caches its token.
 func newLoginCommand(reg *suite.Registry, store *config.Store) *cobra.Command {
@@ -33,7 +65,8 @@ func newLoginCommand(reg *suite.Registry, store *config.Store) *cobra.Command {
 			if err := store.Save(name, tok); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s: token cached at %s\n", name, store.Path())
+			jsonFlag, _ := cmd.Flags().GetBool("json")
+			writeLoginResult(cmd.OutOrStdout(), jsonFlag, name, store.Path())
 			return nil
 		},
 	}
@@ -63,6 +96,7 @@ func newLogoutCommand(reg *suite.Registry, store *config.Store) *cobra.Command {
 				return fmt.Errorf("%s: token store unavailable — cannot clear", name)
 			}
 			out := cmd.OutOrStdout()
+			jsonFlag, _ := cmd.Flags().GetBool("json")
 			// Distinguish "cleared a real entry" from "nothing to clear" so the
 			// message is actionable. Delete is a silent no-op on a missing entry,
 			// so check presence via Load first (mirrors how the token getter in
@@ -73,13 +107,13 @@ func newLogoutCommand(reg *suite.Registry, store *config.Store) *cobra.Command {
 				return err
 			}
 			if !ok {
-				fmt.Fprintf(out, "%s: not logged in\n", name)
+				writeLogoutResult(out, jsonFlag, name, "not_logged_in", store.Path())
 				return nil
 			}
 			if err := store.Delete(name); err != nil {
 				return err
 			}
-			fmt.Fprintf(out, "%s: token cleared (%s)\n", name, store.Path())
+			writeLogoutResult(out, jsonFlag, name, "cleared", store.Path())
 			return nil
 		},
 	}

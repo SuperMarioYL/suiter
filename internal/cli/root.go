@@ -172,14 +172,25 @@ func configPathFromArgs(args []string) string {
 	return ""
 }
 
-// newSuitesCommand lists registered suites.
+// newSuitesCommand lists registered suites. fix-suite-subcommands-ignore-
+// json-flag: the root help promises "所有子命令支持 --json 输出 agent-readable
+// JSON" — with --json set, emit {"suites":[...]} instead of plain lines so an
+// agent can parse the discovery command's output. Plain text unchanged
+// without the flag.
 func newSuitesCommand(reg *suite.Registry) *cobra.Command {
 	return &cobra.Command{
 		Use:   "suites",
 		Short: "List registered suites",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			for _, n := range reg.Names() {
-				fmt.Fprintln(cmd.OutOrStdout(), n)
+			out := cmd.OutOrStdout()
+			names := reg.Names()
+			if jsonFlag, _ := cmd.Flags().GetBool("json"); jsonFlag {
+				enc := json.NewEncoder(out)
+				enc.SetIndent("", "  ")
+				return enc.Encode(map[string]any{"suites": names})
+			}
+			for _, n := range names {
+				fmt.Fprintln(out, n)
 			}
 			return nil
 		},

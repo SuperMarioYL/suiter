@@ -392,3 +392,16 @@ func TestNewClient_Defaults(t *testing.T) {
 		t.Fatalf("Name = %q, want dingtalk", c.Name())
 	}
 }
+
+// TestAuthURLIncludesScope (fix-oauth-authorize-url-required-params) proves
+// the authorize URL carries scope=openid. DingTalk's /oauth2/auth requires
+// scope (only openid supported); x/oauth2 omits the scope param entirely when
+// oauth2.Config.Scope is empty, which v0.8.0 left unset — the authorize page
+// rejected the request and `suiter login dingtalk` could not start.
+func TestAuthURLIncludesScope(t *testing.T) {
+	c := NewClient("dk_x", "sec")
+	got := c.AuthURL("st")
+	if !strings.Contains(got, "scope=openid") {
+		t.Fatalf("AuthURL = %q, want scope=openid (DingTalk /oauth2/auth requires it)", got)
+	}
+}

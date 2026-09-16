@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -151,6 +152,17 @@ func (c *Client) messageSend(ctx context.Context, body []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// fix-wework-agentid-credential-unused: /cgi-bin/message/send REQUIRES
+	// agentid in the JSON body. The CLI collects SUITER_WEWORK_AGENT_ID as a
+	// first-class credential (README advertises it), but the stdin body used
+	// to be posted verbatim, so a user with every env var set still got
+	// errcode 60020/41004 unless they hand-crafted agentid into the JSON.
+	// Inject the configured agentID when the body omits it; an explicit input
+	// agentid wins (no silent override).
+	body, err = injectAgentID(body, c.agentID)
+	if err != nil {
+		return "", err
+	}
 	// fix-wework-secret-leaked-in-url-error: escape access_token via
 	// url.Values so a token containing +, # or & does not corrupt the request.
 	q := url.Values{}
@@ -175,6 +187,33 @@ func (c *Client) messageSend(ctx context.Context, body []byte) (string, error) {
 		return r.MsgID, nil
 	}
 	return "sent", nil
+}
+
+// injectAgentID adds the configured WeCom agentid to a send body when the
+// JSON object omits it (WeCom's message/send requires agentid in the body).
+// agentID digits are sent as a JSON number per the API's integer field; a
+// non-numeric agentID is sent as a string. A body that already carries
+// agentid is returned untouched (user override), as is a nil/empty agentID.
+// A non-object body is an error: posting it verbatim would fail at the API
+// with an opaque errcode instead of a clear local message.
+func injectAgentID(body []byte, agentID string) ([]byte, error) {
+	var obj map[string]any
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return nil, fmt.Errorf("wework: message send body must be a JSON object (WeCom requires agentid in the body): %w", err)
+	}
+	if _, exists := obj["agentid"]; exists || agentID == "" {
+		return body, nil
+	}
+	if n, err := strconv.Atoi(agentID); err == nil {
+		obj["agentid"] = n
+	} else {
+		obj["agentid"] = agentID
+	}
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return nil, fmt.Errorf("wework: re-marshal message body: %w", err)
+	}
+	return out, nil
 }
 
 func (c *Client) messageRead(ctx context.Context, id string) ([]byte, error) {

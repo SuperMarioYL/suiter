@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 for its shipped Go binary.
 
+## [v0.9.0] — 2026-09-17
+
+Four type:fix milestones folded from the v0.9.0 amendment (a code-verified
+bug-hunt; 0 raw/prose patches). No new features. Every defect was reproduced
+against the shipped v0.8.0 source before the fix (red-before/green-after
+regression tests).
+
+### Fixed
+
+- **fix-dingtalk-event-datetime-format** — the agent-loop calendar event body
+  put a "yyyy-MM-dd HH:mm:ss" datetime string in the all-day `start.date`/
+  `end.date` field with no `time`/`timeZone` keys, violating DingTalk's
+  create-event contract (date = all-day yyyy-MM-dd; time = RFC3339 +
+  timeZone for timed events) so the m3 star-moment write was rejected at the
+  last step. The event now carries `start.time`/`end.time` in RFC3339 with an
+  explicit offset plus `timeZone`. (`internal/cli/agent.go`)
+- **fix-wework-agentid-credential-unused** — WeCom's message/send REQUIRES
+  `agentid` in the JSON body, and the CLI advertises
+  `SUITER_WEWORK_AGENT_ID`, but the stdin body was posted verbatim: the
+  credential was accepted yet never used, so a fully-configured user still
+  got errcode 60020/41004. The configured agentID is now injected when the
+  body omits it (an explicit input agentid wins). (`internal/suite/wework/client.go`)
+- **fix-oauth-authorize-url-required-params** — the feishu authorize URL was
+  built without the required `response_type=code` and the dingtalk authorize
+  URL without the required `scope=openid` (x/oauth2 omits scope when
+  Config.Scopes is empty), so the authorize page rejected the request before
+  consent and `suiter login feishu`/`dingtalk` could not start. Both required
+  params are now present. (`internal/suite/feishu/client.go`,
+  `internal/suite/dingtalk/client.go`)
+- **fix-suite-subcommands-ignore-json-flag** — `suites`/`login`/`logout`
+  accepted `--json` but printed plain text, breaking the CLI's own advertised
+  contract ("每个子命令都说 --json stdio"). With `--json` they now emit
+  agent-readable JSON ({"suites":[...]}, {"suite","status","path"}); plain
+  text is unchanged without the flag. (`internal/cli/root.go`,
+  `internal/cli/auth.go`)
+
 ## [v0.8.0] — 2026-09-02
 
 One regression-class fix folded from the v0.8.0 amendment (a code-verified

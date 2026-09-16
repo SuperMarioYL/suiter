@@ -157,10 +157,23 @@ func calendarEventFromSummary(summary string) ([]byte, error) {
 	if r := []rune(title); len(r) > 80 {
 		title = string(r[:80])
 	}
+	// fix-dingtalk-event-datetime-format: DingTalk's create-event contract
+	// defines start.date as an ALL-DAY event date (yyyy-MM-dd) and start.time
+	// (RFC3339, yyyy-MM-dd'T'HH:mm:ss±hh:mm) plus timeZone for timed events.
+	// The old body put a "yyyy-MM-dd HH:mm:ss" datetime string in the date key
+	// with no time/timeZone — invalid under both shapes, so the m3 star-moment
+	// write was rejected at the last step. Emit timed events via the time key
+	// with an explicit numeric offset ("2006-01-02T15:04:05Z07:00").
+	stamp := func(t time.Time) map[string]string {
+		return map[string]string{
+			"time":     t.Format("2006-01-02T15:04:05Z07:00"),
+			"timeZone": "Asia/Shanghai",
+		}
+	}
 	evt := map[string]any{
 		"summary":     title,
-		"start":       map[string]string{"date": now.Add(1 * time.Hour).Format("2006-01-02 15:04:05")},
-		"end":         map[string]string{"date": now.Add(2 * time.Hour).Format("2006-01-02 15:04:05")},
+		"start":       stamp(now.Add(1 * time.Hour)),
+		"end":         stamp(now.Add(2 * time.Hour)),
 		"description": summary,
 	}
 	return json.Marshal(evt)

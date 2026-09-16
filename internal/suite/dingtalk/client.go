@@ -48,6 +48,11 @@ func NewClient(appKey, appSecret string) *Client {
 		oauth: &oauth2.Config{
 			ClientID:     appKey,
 			ClientSecret: appSecret,
+			// fix-oauth-authorize-url-required-params: DingTalk's /oauth2/auth
+			// requires scope (only openid supported). x/oauth2 omits the scope
+			// param entirely when Scope is empty, which made the authorize page
+			// reject the request before the user could consent.
+			Scopes: []string{"openid"},
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  "https://login.dingtalk.com/oauth2/auth",
 				TokenURL: "https://api.dingtalk.com/v1.0/oauth2/userAccessToken",

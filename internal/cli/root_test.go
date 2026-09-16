@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,5 +103,70 @@ func TestConfigPathFromArgs(t *testing.T) {
 				t.Fatalf("configPathFromArgs(%v) = %q, want %q", tc.args, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestSuiteSubcommandsHonorJSONFlag (fix-suite-subcommands-ignore-json-flag)
+// proves suites/logout honor --json. The root Long help promises
+// "所有子命令支持 --json 输出 agent-readable JSON" and README.md repeats it,
+// but v0.8.0 printed plain text on these commands with the flag set — the
+// CLI's own advertised agent-readable contract broken on the discovery
+// command an agent runs first.
+func TestSuiteSubcommandsHonorJSONFlag(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	root := NewRoot()
+	var out strings.Builder
+	root.SetOut(&out)
+	root.SetArgs([]string{"suites", "--json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("suites --json: %v", err)
+	}
+	var parsed struct {
+		Suites []string `json:"suites"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &parsed); err != nil {
+		t.Fatalf("suites --json output = %q, not JSON (advertised --json contract violated): %v", out.String(), err)
+	}
+	if len(parsed.Suites) != 4 {
+		t.Fatalf("suites = %v, want the 4 registered suites", parsed.Suites)
+	}
+
+	// logout --json on a not-logged-in suite emits JSON, not a plain sentence.
+	out.Reset()
+	root.SetArgs([]string{"logout", "feishu", "--json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("logout feishu --json: %v", err)
+	}
+	var logoutOut struct {
+		Suite  string `json:"suite"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &logoutOut); err != nil {
+		t.Fatalf("logout feishu --json output = %q, not JSON: %v", out.String(), err)
+	}
+	if logoutOut.Suite != "feishu" || logoutOut.Status != "not_logged_in" {
+		t.Fatalf("logout --json = %+v, want suite=feishu status=not_logged_in", logoutOut)
+	}
+
+	// Without --json the plain-text surfaces are byte-identical to v0.8.0.
+	// (A fresh root: cobra persistent flag values survive across Executes on
+	// the same command, so the earlier --json would leak into these runs.)
+	root2 := NewRoot()
+	var out2 strings.Builder
+	root2.SetOut(&out2)
+	root2.SetArgs([]string{"suites"})
+	if err := root2.Execute(); err != nil {
+		t.Fatalf("suites: %v", err)
+	}
+	if got, want := out2.String(), "feishu\ndingtalk\nwework\ntencentdocs\n"; got != want {
+		t.Fatalf("suites (no --json) = %q, want %q (plain-text contract unchanged)", got, want)
+	}
+	out2.Reset()
+	root2.SetArgs([]string{"logout", "feishu"})
+	if err := root2.Execute(); err != nil {
+		t.Fatalf("logout feishu: %v", err)
+	}
+	if got, want := out2.String(), "feishu: not logged in\n"; got != want {
+		t.Fatalf("logout feishu (no --json) = %q, want %q (plain-text contract unchanged)", got, want)
 	}
 }

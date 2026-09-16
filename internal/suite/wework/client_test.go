@@ -2,6 +2,7 @@ package wework
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -359,5 +360,56 @@ func TestRead_MessageRead_EscapesSpecialQueryChars(t *testing.T) {
 	}
 	if gotMsgID != weird {
 		t.Fatalf("msgid = %q, want %q (unescaped value corrupted the request)", gotMsgID, weird)
+	}
+}
+
+// TestWrite_MessageSendInjectsAgentID (fix-wework-agentid-credential-unused)
+// proves the configured agentID reaches the send body. WeCom's
+// /cgi-bin/message/send REQUIRES agentid in the JSON body, the CLI advertises
+// SUITER_WEWORK_AGENT_ID (README credential table), yet v0.8.0 posted the
+// stdin body verbatim — the credential was accepted but never used, so a user
+// with every env var set still got errcode 60020/41004 unless they
+// hand-crafted agentid into the JSON.
+func TestWrite_MessageSendInjectsAgentID(t *testing.T) {
+	var gotBody string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/cgi-bin/message/send", func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"errcode":0,"errmsg":"ok","msgid":"msg-9"}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	c := NewClient("corp-1", "1000001", "sec")
+	c.apiBase = srv.URL
+	c.WithTokenGetter(func(context.Context) (suite.Token, error) { return suite.Token{AccessToken: "app-tok"}, nil })
+
+	id, err := c.Write(context.Background(), "message", "", []byte(`{"touser":"@all","msgtype":"text","text":{"content":"hi"}}`))
+	if err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if id != "msg-9" {
+		t.Fatalf("msgid = %q, want msg-9", id)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(gotBody), &body); err != nil {
+		t.Fatalf("send body not a JSON object: %s", gotBody)
+	}
+	if got, want := body["agentid"], float64(1000001); got != want {
+		t.Fatalf("send body = %s — agentid = %v, want %v injected from the configured credential (WeCom requires agentid in the body)", gotBody, got, want)
+	}
+
+	// A user-supplied agentid must win (no silent override).
+	gotBody = ""
+	if _, err := c.Write(context.Background(), "message", "", []byte(`{"agentid":42,"msgtype":"text"}`)); err != nil {
+		t.Fatalf("Write with explicit agentid: %v", err)
+	}
+	var body2 map[string]any
+	if err := json.Unmarshal([]byte(gotBody), &body2); err != nil {
+		t.Fatalf("send body not a JSON object: %s", gotBody)
+	}
+	if body2["agentid"] != float64(42) {
+		t.Fatalf("explicit input agentid overwritten: %s", gotBody)
 	}
 }
