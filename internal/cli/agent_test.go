@@ -5,11 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/SuperMarioYL/suiter/internal/llm"
@@ -74,7 +77,7 @@ func TestSummarizeAndSchedule_EndToEnd(t *testing.T) {
 	sm := &fakeSummarizer{out: "Q3 plan: ship m3 this week; owner: yulei"}
 	var out bytes.Buffer
 
-	if err := summarizeAndSchedule(context.Background(), reg, sm, "doc-7", &out); err != nil {
+	if err := summarizeAndSchedule(context.Background(), reg, sm, "doc-7", false, &out); err != nil {
 		t.Fatalf("summarizeAndSchedule: %v", err)
 	}
 
@@ -107,7 +110,7 @@ func TestSummarizeAndSchedule_EndToEnd(t *testing.T) {
 func TestSummarizeAndSchedule_MissingSuite(t *testing.T) {
 	reg := suite.NewRegistry() // empty
 	sm := &fakeSummarizer{out: "x"}
-	if err := summarizeAndSchedule(context.Background(), reg, sm, "doc-1", &bytes.Buffer{}); err == nil {
+	if err := summarizeAndSchedule(context.Background(), reg, sm, "doc-1", false, &bytes.Buffer{}); err == nil {
 		t.Fatal("want error when feishu suite not registered")
 	}
 }
@@ -118,7 +121,7 @@ func TestSummarizeAndSchedule_SummarizeError(t *testing.T) {
 	reg.Register(&agentFeishu{docBody: []byte("doc")})
 	reg.Register(&agentDingtalk{})
 	sm := &fakeSummarizer{err: errors.New("glm 429 too many requests")}
-	err := summarizeAndSchedule(context.Background(), reg, sm, "doc-1", &bytes.Buffer{})
+	err := summarizeAndSchedule(context.Background(), reg, sm, "doc-1", false, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "429") {
 		t.Fatalf("err = %v, want 429 surfaced", err)
 	}
@@ -295,5 +298,90 @@ func TestCalendarEventBodyUsesRFC3339Time(t *testing.T) {
 	}
 	if e.Summary != "评审会议：确定 v0.9.0 范围，负责人：李雷" {
 		t.Errorf("summary = %q, want the untruncated input (≤80 runes)", e.Summary)
+	}
+}
+
+// newAgentTestRoot builds a cobra root carrying the same persistent --json flag
+// the real root registers (internal/cli/root.go:55) plus the real
+// newAgentCommand tree wired against fake feishu/dingtalk suites. The LLM client
+// is NOT faked: newAgentCommand's RunE resolves it from viper
+// (newLLMClientFromConfig), so the test points SUITER_LLM_BASE_URL at an
+// httptest chat-completions endpoint instead of injecting a summarizer.
+func newAgentTestRoot() *cobra.Command {
+	reg := suite.NewRegistry()
+	reg.Register(&agentFeishu{docBody: []byte(`{"doc":{"title":"Q3 plan","body":"ship v0.10.0"}}`)})
+	reg.Register(&agentDingtalk{})
+	root := &cobra.Command{Use: "suiter", SilenceUsage: true}
+	root.PersistentFlags().Bool("json", false, "output agent-readable JSON")
+	root.AddCommand(newAgentCommand(reg))
+	return root
+}
+
+// TestAgentSubcommandHonorsJSONFlag (fix-agent-subcommand-ignores-json-flag)
+// proves the flagship agent command honours --json. The CLI's own root Long help
+// promises "所有子命令支持 --json 输出 agent-readable JSON"
+// (internal/cli/root.go:36) — the README shows --json on a resource op
+// (README.md:58) — but v0.9.0's fix-suite-subcommands-ignore-json-flag brought
+// only suites/login/logout into line: newAgentCommand never read the
+// flag, so `suiter agent run summarize-and-schedule <doc> --json` printed the
+// plain "scheduled: …" block and an agent piping the m3 star-moment into a JSON
+// parser failed. The JSON assertion below FAILS on the v0.9.0 code.
+func TestAgentSubcommandHonorsJSONFlag(t *testing.T) {
+	llmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"评审会议：确定 v0.10.0 范围，负责人：李雷"}}]}`))
+	}))
+	t.Cleanup(llmSrv.Close)
+
+	setupViperForTest(t)
+	t.Setenv("SUITER_LLM_API_KEY", "test-key")
+	t.Setenv("SUITER_LLM_BASE_URL", llmSrv.URL)
+	t.Cleanup(viper.Reset)
+
+	// --json: stdout must be agent-readable JSON carrying the documented keys.
+	root := newAgentTestRoot()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"agent", "run", "summarize-and-schedule", "doc-1", "--json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("agent … --json: %v (out=%s)", err, out.String())
+	}
+	var parsed struct {
+		EventID string `json:"event_id"`
+		Doc     string `json:"doc"`
+		Summary string `json:"summary"`
+		Event   string `json:"event"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &parsed); err != nil {
+		t.Fatalf("agent --json output = %q, not JSON (the CLI help promises 所有子命令支持 --json): %v", out.String(), err)
+	}
+	if parsed.EventID != "evt-42" {
+		t.Fatalf("event_id = %q, want evt-42", parsed.EventID)
+	}
+	if parsed.Event != "evt-42" {
+		t.Fatalf("event = %q, want evt-42", parsed.Event)
+	}
+	if parsed.Doc != "doc-1" {
+		t.Fatalf("doc = %q, want doc-1", parsed.Doc)
+	}
+	if !strings.Contains(parsed.Summary, "v0.10.0") {
+		t.Fatalf("summary = %q, want the model summary", parsed.Summary)
+	}
+
+	// Without --json the v0.9.0 plain block is byte-identical (a fresh root:
+	// cobra persistent flag values survive across Executes on the same command,
+	// so the earlier --json would leak into this run).
+	root2 := newAgentTestRoot()
+	var out2 bytes.Buffer
+	root2.SetOut(&out2)
+	root2.SetErr(&out2)
+	root2.SetArgs([]string{"agent", "run", "summarize-and-schedule", "doc-1"})
+	if err := root2.Execute(); err != nil {
+		t.Fatalf("agent …: %v", err)
+	}
+	want := "scheduled: evt-42\n  doc:      doc-1\n  summary:  评审会议：确定 v0.10.0 范围，负责人：李雷\n  event:    evt-42\n"
+	if got := out2.String(); got != want {
+		t.Fatalf("plain output = %q, want %q (plain-text contract unchanged)", got, want)
 	}
 }

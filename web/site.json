@@ -10,7 +10,7 @@
   },
   "meta": {
     "visual_profile": "neon-particle",
-    "content_version": "0.9.0",
+    "content_version": "0.10.0",
     "demo_source": "docs/demo-results.json"
   },
   "hero": {
@@ -243,10 +243,15 @@
     }
   ],
   "footer": {
-    "tag": "0.9.0 · Go 1.24+ · MIT"
+    "tag": "0.10.0 · Go 1.24+ · MIT"
   },
-  "content_version": "v0.9.0",
+  "content_version": "v0.10.0",
   "changelog": [
+    {
+      "version": "v0.10.0",
+      "en": "Three correctness fixes: the flagship `agent run summarize-and-schedule` command now honors --json and emits agent-readable JSON (the CLI help advertises --json on every subcommand); Feishu's token-minting paths reject an empty token instead of caching an unusable credential and reporting a successful login; and the version-lockstep regression guard now also pins the README hero version line and the site meta/footer version strings, so a bump cannot leave a public surface a release behind.",
+      "zh": "三项正确性修复：旗舰命令 `agent run summarize-and-schedule` 现在支持 --json，输出 agent 可读 JSON（CLI 帮助声明所有子命令支持 --json）；飞书两条令牌签发路径会拒绝空令牌，不再把不可用凭证写入缓存并报告登录成功；版本一致性回归测试新增守卫 README 版本行与站点 meta/footer 版本字符串，升级时不会再漏改公开版本面。"
+    },
     {
       "version": "v0.9.0",
       "en": "Four correctness fixes on the agent-critical paths: the agent-loop DingTalk calendar event now carries start/end.time in RFC3339 plus timeZone (the old body put a datetime string in the all-day date field and was rejected); the configured WeCom agentid is injected into message-send bodies (WeCom requires it; the credential used to be accepted but unused); the feishu authorize URL now carries response_type=code and the dingtalk authorize URL scope=openid (both required params were missing, so login could not start); and suites/login/logout honor --json with agent-readable output as the CLI help advertises.",

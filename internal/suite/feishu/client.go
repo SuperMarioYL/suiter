@@ -219,6 +219,20 @@ func (c *Client) exchange(ctx context.Context, code string) (suite.Token, error)
 	if tr.Code != 0 {
 		return suite.Token{}, fmt.Errorf("feishu: exchange code=%d msg=%s", tr.Code, tr.Msg)
 	}
+	// fix-feishu-token-minting-accepts-empty-token: a code=0 success whose data
+	// carries no access_token used to be returned as a Token with an EMPTY
+	// AccessToken and a nil error. newLoginCommand then cached it via store.Save
+	// and printed "feishu: token cached" — a success message for an unusable
+	// credential — after which every read failed in cachedToken with "feishu:
+	// empty cached token (run `suiter login feishu`)", so re-running login
+	// repeated the cycle (the m1 break). The larksuite SDK models the field as
+	// `AccessToken *string json:"access_token,omitempty"`, so a tokenless 200 is
+	// allowed by the wire contract and must be rejected here. Mirrors the sibling
+	// clients' guard (dingtalk/client.go:187, tencentdocs/client.go:183,
+	// wework/client.go:116).
+	if tr.Data.AccessToken == "" {
+		return suite.Token{}, fmt.Errorf("feishu: exchange returned no access token: %s", string(raw))
+	}
 	return suite.Token{
 		AccessToken:  tr.Data.AccessToken,
 		RefreshToken: tr.Data.RefreshToken,
@@ -251,6 +265,14 @@ func (c *Client) appAccessToken(ctx context.Context) (string, error) {
 	}
 	if tr.Code != 0 {
 		return "", fmt.Errorf("feishu: app_access_token code=%d msg=%s", tr.Code, tr.Msg)
+	}
+	// fix-feishu-token-minting-accepts-empty-token: same guard as exchange — a
+	// code=0 body with no app_access_token was returned as "" and then sent as
+	// `Authorization: Bearer ` on the OIDC exchange, surfacing an opaque failure
+	// instead of naming the missing credential. Mirrors wework's gettoken guard
+	// (internal/suite/wework/client.go:116).
+	if tr.AppAccessToken == "" {
+		return "", fmt.Errorf("feishu: app_access_token returned no token: %s", string(raw))
 	}
 	return tr.AppAccessToken, nil
 }

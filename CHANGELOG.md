@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 for its shipped Go binary.
 
+## [v0.10.0] — 2026-10-24
+
+Three type:fix milestones folded from the v0.10.0 amendment (a code-verified
+bug-hunt; 0 raw/prose patches). No new features. Every defect was reproduced
+against the shipped v0.9.0 source before the fix (red-before/green-after
+regression tests).
+
+### Fixed
+
+- **fix-agent-subcommand-ignores-json-flag** — the CLI's own root help promises
+  "所有子命令支持 --json 输出 agent-readable JSON", but the flagship
+  `suiter agent run summarize-and-schedule` command never read
+  the flag: it printed the plain `scheduled: …` block, so an agent wrapping the
+  m3 star-moment could not parse the result. The command now emits
+  `{"event_id":…,"doc":…,"summary":…,"event":…}` when `--json` is set, and the
+  plain block stays byte-identical when it is not.
+  (`internal/cli/agent.go`)
+- **fix-feishu-token-minting-accepts-empty-token** — `exchange()` and
+  `appAccessToken()` returned a `Token` with an empty `AccessToken` and a nil
+  error for a `code=0` response that carried no token, so `suiter login feishu`
+  cached an unusable credential, printed "token cached", and every subsequent
+  read failed with "empty cached token" — re-login repeating the cycle. Both
+  paths now reject an empty token, mirroring the dingtalk/tencentdocs/wework
+  guards. (`internal/suite/feishu/client.go`)
+- **fix-version-lockstep-guard-blind-spots** — the version-drift regression
+  guard pinned only the `VERSION` file, the embed, `web/site.json`'s top-level
+  `content_version` and the CHANGELOG head, leaving the README hero version line
+  (both locales) and the site's `meta.content_version` / `footer.tag` unguarded.
+  The guard now covers all of them, so a bump can no longer leave a public
+  surface a release behind while `go test ./...` stays green. (`version_test.go`)
+
+### Changed
+
+- Every version surface bumped to v0.10.0: `VERSION`, `README.md`,
+  `README.en.md`, `web/site.json` (top-level + meta + footer), `CHANGELOG.md`,
+  and the recorded demo provenance (`docs/demo-results.json`, re-run for real).
+
 ## [v0.9.0] — 2026-09-17
 
 Four type:fix milestones folded from the v0.9.0 amendment (a code-verified

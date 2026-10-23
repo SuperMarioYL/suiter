@@ -433,3 +433,70 @@ func TestAuthURLIncludesResponseType(t *testing.T) {
 		t.Fatalf("authURL = %q, want response_type=code (Feishu authorize requires it)", got)
 	}
 }
+
+// TestExchange_EmptyTokenRejected (fix-feishu-token-minting-accepts-empty-token)
+// proves a code=0 success envelope whose `data` carries no access_token is
+// REJECTED instead of being returned as a usable Token. Before the fix,
+// exchange() returned suite.Token{AccessToken: ""} with a nil error, so
+// newLoginCommand (internal/cli/auth.go:58-69) store.Save()d that empty
+// credential and printed "feishu: token cached at …" — a success message for an
+// unusable token — after which every read failed in cachedToken with "feishu:
+// empty cached token (run `suiter login feishu`)" and re-running login repeated
+// the cycle. That is the exact symptom the plan's v0.2.0 milestone
+// fix-feishu-oidc-token-parse described; its three sibling clients already
+// assert a non-empty token (dingtalk/client.go:187, tencentdocs/client.go:183,
+// wework/client.go:116) but feishu did not. The larksuite SDK models the field
+// as `AccessToken *string json:"access_token,omitempty"`, so a tokenless 200
+// success is permitted by the wire contract and must be handled here.
+func TestExchange_EmptyTokenRejected(t *testing.T) {
+	cases := []struct {
+		name     string
+		oidcResp string
+	}{
+		{"empty_data_object", `{"code":0,"msg":"success","data":{}}`},
+		{"missing_data_key", `{"code":0,"msg":"success"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, _, _ := feishuMux(t, tc.oidcResp)
+			c := newTestClient(srv.URL)
+
+			tok, err := c.exchange(context.Background(), "the-code")
+			if err == nil {
+				t.Fatalf("exchange returned no error for a tokenless success (tok=%+v) — an empty credential would be cached as a successful login", tok)
+			}
+			if tok.AccessToken != "" {
+				t.Fatalf("exchange returned AccessToken=%q alongside the error", tok.AccessToken)
+			}
+			if !strings.Contains(err.Error(), "access token") {
+				t.Fatalf("err = %q, want it to name the missing access token", err)
+			}
+		})
+	}
+}
+
+// TestAppAccessToken_EmptyTokenRejected
+// (fix-feishu-token-minting-accepts-empty-token) proves the app-token path has
+// the same guard: a code=0 body with no app_access_token used to be returned as
+// "" and then sent as `Authorization: Bearer ` on the OIDC exchange, producing
+// an opaque failure. Both feishu token-minting paths must reject an empty token,
+// mirroring wework's gettoken guard (internal/suite/wework/client.go:116).
+func TestAppAccessToken_EmptyTokenRejected(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":0,"msg":"success"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	c := newTestClient(srv.URL)
+	tok, err := c.appAccessToken(context.Background())
+	if err == nil {
+		t.Fatalf("appAccessToken returned no error for a tokenless success (tok=%q)", tok)
+	}
+	if tok != "" {
+		t.Fatalf("appAccessToken returned %q alongside the error", tok)
+	}
+	if !strings.Contains(err.Error(), "app_access_token") {
+		t.Fatalf("err = %q, want it to name the missing app_access_token", err)
+	}
+}

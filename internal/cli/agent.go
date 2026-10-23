@@ -45,7 +45,11 @@ func newAgentCommand(reg *suite.Registry) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			llmClient := newLLMClientFromConfig()
 			out := cmd.OutOrStdout()
-			return summarizeAndSchedule(cmd.Context(), reg, llmClient, args[0], out)
+			// fix-agent-subcommand-ignores-json-flag: the root help promises
+			// "所有子命令支持 --json 输出 agent-readable JSON", so the agent
+			// command must honour the flag like suites/login/logout do.
+			jsonFlag, _ := cmd.Flags().GetBool("json")
+			return summarizeAndSchedule(cmd.Context(), reg, llmClient, args[0], jsonFlag, out)
 		},
 	}
 	runCmd.AddCommand(sumSchedCmd)
@@ -102,10 +106,12 @@ func defaultLLMModel(baseURL string) string {
 //  3. build a 钉钉 calendar event from the summary + write it via
 //     dingtalk.Write("calendar", "primary", event)
 //
-// It prints the created event id (or {"id":...} JSON via the caller's --json
-// flag handled by the generic dispatcher, not here). Errors at each stage
-// surface clearly so a coding agent can act on them.
-func summarizeAndSchedule(ctx context.Context, reg *suite.Registry, sm summarizer, feishuDocID string, w io.Writer) error {
+// It prints the created event id: the v0.9.0 plain block when jsonFlag is
+// false, or the same four fields as agent-readable JSON when true
+// (fix-agent-subcommand-ignores-json-flag — the root help promises --json on
+// every subcommand, mirroring writeLoginResult/writeLogoutResult in auth.go).
+// Errors at each stage surface clearly so a coding agent can act on them.
+func summarizeAndSchedule(ctx context.Context, reg *suite.Registry, sm summarizer, feishuDocID string, jsonFlag bool, w io.Writer) error {
 	feishu, ok := reg.Get("feishu")
 	if !ok {
 		return fmt.Errorf("agent: feishu suite not registered")
@@ -137,6 +143,20 @@ func summarizeAndSchedule(ctx context.Context, reg *suite.Registry, sm summarize
 		return fmt.Errorf("agent: write dingtalk calendar: %w", err)
 	}
 
+	if jsonFlag {
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		// A structured mirror of the plain block's four fields, so an agent
+		// wrapping the m3 star-moment can parse the result instead of scraping
+		// a sentence. summary is truncated with the same rune-safe helper the
+		// plain path uses, so both surfaces agree.
+		return enc.Encode(map[string]string{
+			"event_id": eventID,
+			"doc":      feishuDocID,
+			"summary":  truncate(summary, 80),
+			"event":    eventID,
+		})
+	}
 	fmt.Fprintf(w, "scheduled: %s\n  doc:      %s\n  summary:  %s\n  event:    %s\n",
 		eventID, feishuDocID, truncate(summary, 80), eventID)
 	return nil
